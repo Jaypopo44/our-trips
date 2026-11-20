@@ -1,0 +1,1319 @@
+<!doctype html><html lang="th"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover"><meta name="apple-mobile-web-app-capable" content="yes"><meta name="mobile-web-app-capable" content="yes"><meta name="apple-mobile-web-app-title" content="ทริปของเรา"><meta name="apple-mobile-web-app-status-bar-style" content="default"><meta name="theme-color" content="#1c2a55"><meta name="robots" content="noindex"><style>:root{color-scheme:light;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}body{margin:0;-webkit-text-size-adjust:100%}img{max-width:100%}[hidden]{display:none!important}</style><script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.100.0/dist/umd/supabase.js"></script><script>
+/* Supabase adapter: gives the page the same claude.use('db'|'user'|'assets') API it had as a Claude artifact.
+   Access = secret key in the share link (#k=...). Data goes through security-definer RPCs that check the key. */
+(() => {
+  const CFG = {
+    url: 'https://fqfagnghlvqatjjdpuin.supabase.co',
+    key: 'sb_publishable_1mpRtG61hD-n8ZE-9wGTCg_2gynH0vP',
+    bucket: 'trip-photos',
+    names: { owner: 'Jay', partner: 'Nat' }
+  };
+  const sb = window.supabase.createClient(CFG.url, CFG.key, { auth: { persistSession: false, autoRefreshToken: false } });
+  const store = {
+    get(k){ try { return localStorage.getItem(k); } catch { return null; } },
+    set(k, v){ try { v == null ? localStorage.removeItem(k) : localStorage.setItem(k, v); } catch {} }
+  };
+
+  // ---- key from link ----
+  let KEY = null;
+  { const m = location.hash.match(/k=([A-Za-z0-9_-]{16,})/); if (m) { KEY = m[1]; store.set('trip-key', KEY); } else KEY = store.get('trip-key'); }
+  let ME = store.get('trip-me');
+  let roomId = 'x';
+
+  let ready; const readyP = new Promise(r => { ready = r; });
+
+  // ---- overlay (key check + who-are-you) ----
+  function overlay(build){
+    let el = document.getElementById('trip-gate');
+    if (!el) {
+      el = document.createElement('div'); el.id = 'trip-gate';
+      el.style.cssText = 'position:fixed;inset:0;z-index:50;display:flex;align-items:center;justify-content:center;padding:24px max(16px,env(safe-area-inset-right,0px)) 24px max(16px,env(safe-area-inset-left,0px));background:var(--paper,#edf1f8);color:var(--ink,#1a2342);font-family:var(--f-body,system-ui,sans-serif)';
+      document.body.appendChild(el);
+    }
+    el.replaceChildren();
+    const card = document.createElement('div');
+    card.style.cssText = 'background:var(--card,#fff);border-radius:20px;padding:28px 24px;max-width:380px;width:100%;box-shadow:var(--shadow,0 8px 24px rgba(0,0,0,.08));display:flex;flex-direction:column;gap:14px;text-align:center';
+    const h = document.createElement('h2'); h.textContent = 'ทริปของเรา';
+    h.style.cssText = 'margin:0;font:700 26px var(--f-display,system-ui)';
+    card.append(h); build(card); el.append(card);
+  }
+  function closeOverlay(){ const el = document.getElementById('trip-gate'); if (el) el.remove(); }
+  function para(t, muted){ const p = document.createElement('p'); p.textContent = t; p.style.cssText = 'margin:0;font-size:15px;line-height:1.6' + (muted ? ';color:var(--muted,#5b6788)' : ''); return p; }
+  function btn(t, onclick, primary){
+    const b = document.createElement('button'); b.type = 'button'; b.textContent = t; b.onclick = onclick;
+    b.style.cssText = 'border:0;border-radius:999px;padding:12px 18px;font:600 16px var(--f-body,system-ui);cursor:pointer;' +
+      (primary ? 'background:var(--accent,#e2486f);color:var(--accent-ink,#fff)' : 'background:var(--paper,#edf1f8);color:var(--ink,#1a2342)');
+    return b;
+  }
+  function askWho(){
+    overlay(card => {
+      card.append(para('เปิดครั้งแรกในเครื่องนี้ บอกหน่อยว่าคุณคือใคร'),
+        btn('ฉันคือ ' + CFG.names.owner, () => pick('owner'), true),
+        btn('ฉันคือ ' + CFG.names.partner, () => pick('partner'), true),
+        para('เลือกครั้งเดียว เครื่องนี้จะจำไว้', true));
+    });
+  }
+  function pick(who){ ME = who; store.set('trip-me', who); closeOverlay(); ready(); addSwitcher(); }
+  function addSwitcher(){
+    if (document.getElementById('trip-who')) return;
+    const b = document.createElement('button'); b.id = 'trip-who'; b.type = 'button';
+    b.textContent = 'ใช้งานเป็น ' + CFG.names[ME] + ' · เปลี่ยน';
+    b.style.cssText = 'position:fixed;left:max(12px,env(safe-area-inset-left,0px));bottom:calc(10px + env(safe-area-inset-bottom,0px));z-index:15;border:1px solid var(--line,#d4dbea);background:var(--card,#fff);color:var(--muted,#5b6788);border-radius:999px;padding:4px 12px;font:12px var(--f-body,system-ui);cursor:pointer';
+    b.onclick = () => { store.set('trip-me', null); location.reload(); };
+    document.body.appendChild(b);
+  }
+
+  async function sha(s){
+    try { const b = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(s)); return [...new Uint8Array(b)].map(x => x.toString(16).padStart(2,'0')).join('').slice(0, 24); }
+    catch { return 'room'; }
+  }
+
+  async function boot(){
+    if (!KEY) { overlay(c => c.append(para('เปิดหน้านี้จากลิงก์ที่แชร์กันไว้ (ลิงก์ที่มี #k=… ต่อท้าย)'), para('ถ้าไม่มีลิงก์ ขอจากอีกคนได้เลย', true))); return; }
+    let ok = false;
+    try { const { data, error } = await sb.rpc('trip_check', { k: KEY }); ok = !error && data === true; if (error) throw error; }
+    catch (e) { overlay(c => c.append(para('เชื่อมต่อฐานข้อมูลไม่ได้ ลองเปิดใหม่อีกครั้ง'), para(String(e.message || e), true))); return; }
+    if (!ok) { store.set('trip-key', null); overlay(c => c.append(para('ลิงก์นี้ใช้ไม่ได้แล้ว ขอลิงก์ใหม่จากอีกคน'))); return; }
+    roomId = await sha(KEY);
+    startRealtime();
+    if (ME !== 'owner' && ME !== 'partner') askWho(); else { ready(); addSwitcher(); }
+  }
+
+  // ---- db shim ----
+  const listeners = {};
+  const timers = {};
+  const err = e => (e && (e.code === '42501' || /denied/i.test(e.message || '')) ? { code: 'invalid_argument', message: 'denied' } : { code: 'unavailable', message: String((e && e.message) || e) });
+  async function rpc(fn, args){ const { data, error } = await sb.rpc(fn, { k: KEY, ...args }); if (error) throw err(error); return data; }
+  const fetchCol = col => rpc('trip_list', { c: col }).then(r => r || []);
+  const meta = { fromCache: false, hasPendingWrites: false };
+  const docSnap = (id, data) => ({ id, exists: data != null, data: () => data == null ? undefined : data, metadata: meta });
+  function deliver(col, rows){ (listeners[col] || []).forEach(l => l.next(rows)); }
+  async function refresh(col){
+    try { deliver(col, await fetchCol(col)); }
+    catch (e) { (listeners[col] || []).forEach(l => l.fail && l.fail(e)); }
+  }
+  function schedule(col){ clearTimeout(timers[col]); timers[col] = setTimeout(() => refresh(col), 120); }
+  let chan = null;
+  function startRealtime(){
+    try {
+      chan = sb.channel('trip-' + roomId, { config: { broadcast: { self: false } } });
+      chan.on('broadcast', { event: 'changed' }, ({ payload }) => { if (payload && payload.col) schedule(payload.col); }).subscribe();
+    } catch {}
+    setInterval(() => Object.keys(listeners).forEach(schedule), 45000);
+    document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible') Object.keys(listeners).forEach(schedule); });
+  }
+  function changed(col){ schedule(col); try { chan && chan.send({ type: 'broadcast', event: 'changed', payload: { col } }); } catch {} }
+  function listen(col, l){ (listeners[col] = listeners[col] || new Set()).add(l); refresh(col); return () => listeners[col].delete(l); }
+  const isObj = v => v && typeof v === 'object' && !Array.isArray(v);
+  function merge(a, b){ const o = { ...(a || {}) }; for (const [k, v] of Object.entries(b)) o[k] = isObj(v) && isObj(o[k]) ? merge(o[k], v) : v; return o; }
+  function splitPath(p){ const s = p.split('/'); return { col: s.slice(0, -1).join('/'), id: s[s.length - 1] }; }
+  function docRef(path){
+    const { col, id } = splitPath(path);
+    return {
+      id, path,
+      async get(){ const d = await rpc('trip_get', { c: col, i: id }); return docSnap(id, d); },
+      async set(data){ await rpc('trip_set', { c: col, i: id, d: data }); changed(col); },
+      async update(patch){
+        const cur = await rpc('trip_get', { c: col, i: id });
+        if (cur == null) throw { code: 'invalid_argument', message: 'missing document' };
+        await rpc('trip_set', { c: col, i: id, d: merge(cur, patch) }); changed(col);
+      },
+      async delete(){ await rpc('trip_delete', { c: col, i: id }); changed(col); },
+      onSnapshot(next, fail){
+        return listen(col, { next: rows => { const r = rows.find(x => x.id === id); next(docSnap(id, r ? r.data : null)); }, fail });
+      },
+      collection(sub){ return colRef(path + '/' + sub); }
+    };
+  }
+  function colRef(col){
+    return {
+      path: col,
+      doc(id){ return docRef(col + '/' + (id || newId())); },
+      async add(data){ const r = docRef(col + '/' + newId()); await r.set(data); return r; },
+      async get(){ const rows = await fetchCol(col); return qSnap(rows); },
+      onSnapshot(next, fail){ return listen(col, { next: rows => next(qSnap(rows)), fail }); }
+    };
+  }
+  function qSnap(rows){ const docs = rows.map(r => docSnap(r.id, r.data)); return { docs, size: docs.length, empty: !docs.length, metadata: meta, docChanges: () => [] }; }
+  function newId(){ return (crypto.randomUUID ? crypto.randomUUID() : Date.now().toString(36) + Math.random().toString(36).slice(2)).replace(/-/g, '').slice(0, 20); }
+  const db = { doc: docRef, collection: colRef };
+
+  // ---- user shim ----
+  const user = {
+    async id(){ return ME; },
+    async isOwner(){ return ME === 'owner'; },
+    async canEdit(){ return true; },
+    async can(){ return true; },
+    async me(){ return { id: ME, name: CFG.names[ME] || '', avatarUrl: '', color: '#888', email: null, isOwner: ME === 'owner', canEdit: true }; },
+    async profiles(ids){
+      const out = {};
+      for (const id of [].concat(ids)) out[id] = { id, name: CFG.names[id] || '', avatarUrl: '', color: '#888', email: null, isMe: id === ME, guest: false };
+      return out;
+    }
+  };
+
+  // ---- assets shim (public bucket, unguessable paths) ----
+  const assets = {
+    async upload(blob, opts){
+      if (blob.size > 20 * 1024 * 1024) throw { code: 'too_large' };
+      const type = (opts && opts.type) || blob.type || 'image/jpeg';
+      const ext = type === 'image/png' ? 'png' : type === 'image/webp' ? 'webp' : type === 'image/gif' ? 'gif' : 'jpg';
+      const path = roomId + '/' + newId() + '.' + ext;
+      const { error } = await sb.storage.from(CFG.bucket).upload(path, blob, { contentType: type, upsert: false });
+      if (error) throw { code: /size|large/i.test(error.message) ? 'too_large' : /mime|type/i.test(error.message) ? 'unsupported_type' : 'upstream_error', message: error.message };
+      return { id: path, url: window.tripBlobUrl(path), sizeBytes: blob.size, contentType: type };
+    },
+    async delete(path){ try { await sb.storage.from(CFG.bucket).remove([path]); } catch {} return { deleted: true }; },
+    async list(){ return { assets: [], usage: { files: 0, bytes: 0, maxFiles: 0, maxBytes: 0 } }; }
+  };
+  window.tripBlobUrl = path => sb.storage.from(CFG.bucket).getPublicUrl(path).data.publicUrl;
+
+  window.claude = {
+    async use(name){
+      await readyP;
+      return name === 'db' ? db : name === 'user' ? user : name === 'assets' ? assets : null;
+    }
+  };
+
+  if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', boot); else boot();
+})();
+
+</script></head><body>
+<title>ทริปของเรา</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bai+Jamjuree:wght@500;600;700&family=IBM+Plex+Sans+Thai:wght@400;500;600&family=IBM+Plex+Mono:wght@500&display=swap">
+<style>
+/* Layout: boarding-pass hero, ticket-stub trip journal beside a month calendar; spending tab swaps the list for a monthly chart */
+:root{
+  --paper:#edf1f8; --card:#ffffff; --ink:#1a2342; --muted:#5b6788; --line:#d4dbea;
+  --hero:#1c2a55; --hero-ink:#f4f6ff; --hero-muted:#aab6dc;
+  --accent:#e2486f; --accent-ink:#ffffff; --accent-soft:#fde6ec; --bar:#f2a3b8;
+  --mint:#14876f; --mint-soft:#daf3ec; --amber:#a86a00; --amber-soft:#fbefd4;
+  --sky:#3461c9; --sky-soft:#e1e9fb; --star:#e0a100; --scrim:rgba(10,14,30,.82);
+  --shadow:0 1px 2px rgba(26,35,66,.06),0 8px 24px rgba(26,35,66,.07);
+  --f-display:"Bai Jamjuree","IBM Plex Sans Thai",system-ui,sans-serif;
+  --f-body:"IBM Plex Sans Thai",system-ui,-apple-system,"Segoe UI",sans-serif;
+  --f-mono:"IBM Plex Mono",ui-monospace,Consolas,monospace;
+}
+@media (prefers-color-scheme: dark){:root:not([data-theme="light"]){
+  --paper:#0d1222; --card:#161e36; --ink:#e8ecf8; --muted:#9aa5c3; --line:#2a3454;
+  --hero:#1f2c5c; --hero-ink:#f4f6ff; --hero-muted:#a7b3da;
+  --accent:#ff7398; --accent-ink:#1a0710; --accent-soft:#3d1a28; --bar:#8a3d58;
+  --mint:#4fd0b2; --mint-soft:#123a33; --amber:#f2b84e; --amber-soft:#3b2e12;
+  --sky:#86a8ff; --sky-soft:#1c2a52; --star:#f5c142; --scrim:rgba(0,0,0,.85);
+  --shadow:0 1px 2px rgba(0,0,0,.3); color-scheme:dark;
+}}
+:root[data-theme="dark"]{
+  --paper:#0d1222; --card:#161e36; --ink:#e8ecf8; --muted:#9aa5c3; --line:#2a3454;
+  --hero:#1f2c5c; --hero-ink:#f4f6ff; --hero-muted:#a7b3da;
+  --accent:#ff7398; --accent-ink:#1a0710; --accent-soft:#3d1a28; --bar:#8a3d58;
+  --mint:#4fd0b2; --mint-soft:#123a33; --amber:#f2b84e; --amber-soft:#3b2e12;
+  --sky:#86a8ff; --sky-soft:#1c2a52; --star:#f5c142; --scrim:rgba(0,0,0,.85);
+  --shadow:0 1px 2px rgba(0,0,0,.3); color-scheme:dark;
+}
+*{box-sizing:border-box}
+body{background:var(--paper);color:var(--ink);font:15px/1.6 var(--f-body)}
+.wrap{max-width:1120px;margin:0 auto;padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px));padding-block:20px 72px;display:flex;flex-direction:column;gap:20px}
+h1,h2,h3{font-family:var(--f-display);text-wrap:balance;margin:0;line-height:1.25}
+button,input,select,textarea{font:inherit;color:inherit}
+:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+.num{font-variant-numeric:tabular-nums}
+.vh{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap}
+
+/* hero */
+.hero{background:var(--hero);color:var(--hero-ink);border-radius:20px;padding:22px 24px;display:grid;grid-template-columns:minmax(0,1fr) auto;gap:16px 24px;align-items:end;position:relative;overflow:hidden}
+.hero::after{content:"";position:absolute;inset:auto -40px -60px auto;width:220px;height:220px;border-radius:50%;border:28px solid rgba(255,255,255,.05)}
+.hero .eyebrow{font:500 12px/1 var(--f-mono);letter-spacing:.14em;text-transform:uppercase;color:var(--hero-muted)}
+.hero .big{display:flex;align-items:baseline;gap:10px;flex-wrap:wrap;margin-top:10px}
+.hero .count{font:700 64px/0.95 var(--f-display);font-variant-numeric:tabular-nums}
+.hero .unit{font:600 20px/1.2 var(--f-display)}
+.hero .dest{font:600 24px/1.3 var(--f-display);margin-top:8px}
+.hero .when{color:var(--hero-muted);font-size:14px}
+.pair{display:flex;align-items:center;gap:10px;position:relative;z-index:1}
+.avs{display:flex}
+.avs img{width:38px;height:38px;border-radius:50%;border:2px solid var(--hero);object-fit:cover;background:var(--hero-muted)}
+.avs img+img{margin-left:-10px}
+.pair .names{font-size:13px;color:var(--hero-muted);line-height:1.35;text-align:right}
+.banner{border-radius:12px;padding:10px 14px;font-size:14px;background:var(--amber-soft);color:var(--ink);border:1px solid var(--line)}
+
+/* layout */
+.main{display:grid;grid-template-columns:minmax(0,1fr) 320px;gap:24px;align-items:start}
+@media (max-width:900px){.main{grid-template-columns:minmax(0,1fr)}.aside{order:2}}
+.col{display:flex;flex-direction:column;gap:16px;min-width:0}
+.toolbar{display:flex;gap:10px;align-items:center;flex-wrap:wrap;justify-content:space-between}
+.tabs{display:flex;gap:4px;background:var(--card);padding:4px;border-radius:999px;box-shadow:var(--shadow);flex-wrap:wrap}
+.tabs button{border:0;background:transparent;padding:6px 14px;border-radius:999px;cursor:pointer;color:var(--muted);font-size:14px}
+.tabs button[aria-pressed="true"]{background:var(--ink);color:var(--card)}
+.tabs .n{font:500 11px var(--f-mono);margin-left:4px;opacity:.75}
+.btn{border:0;border-radius:999px;padding:9px 18px;background:var(--accent);color:var(--accent-ink);font-weight:600;cursor:pointer;display:inline-flex;align-items:center;gap:6px}
+.btn:hover{filter:brightness(1.05)}
+.btn-ghost{border:1px solid var(--line);background:transparent;color:var(--ink);border-radius:999px;padding:5px 12px;cursor:pointer;font-size:13px;text-decoration:none;display:inline-flex;align-items:center;gap:4px}
+.btn-ghost:hover{background:var(--paper)}
+.btn-ghost.danger{color:var(--accent)}
+.link{border:0;background:none;color:var(--muted);cursor:pointer;padding:0;font-size:13px;text-decoration:underline;text-underline-offset:3px}
+
+/* form */
+.panel{background:var(--card);border-radius:16px;box-shadow:var(--shadow);padding:18px}
+.form{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px 14px}
+.form h3{grid-column:1/-1;font-size:18px}
+.field{display:flex;flex-direction:column;gap:4px;min-width:0}
+.field.full{grid-column:1/-1}
+.field>label,.field .lab{font-size:13px;color:var(--muted);font-weight:500}
+.field input,.field select,.field textarea{border:1px solid var(--line);background:var(--paper);border-radius:10px;padding:9px 11px;width:100%;min-width:0}
+.field textarea{resize:vertical;min-height:64px}
+.modes{display:flex;gap:6px;flex-wrap:wrap}
+.modes label{display:inline-flex;align-items:center;gap:6px;border:1px solid var(--line);border-radius:999px;padding:5px 12px;cursor:pointer;font-size:14px}
+.modes label:has(input:checked){border-color:var(--accent);background:var(--accent-soft)}
+.modes input{accent-color:var(--accent)}
+.form .row{grid-column:1/-1;display:flex;gap:8px;justify-content:flex-end;align-items:center;flex-wrap:wrap}
+.form .err{color:var(--accent);font-size:13px;margin-right:auto}
+@media (max-width:520px){.form{grid-template-columns:minmax(0,1fr)}}
+
+/* tickets */
+.group{display:flex;flex-direction:column;gap:12px}
+.group-h{display:flex;align-items:baseline;gap:8px;flex-wrap:wrap;font:600 13px/1.3 var(--f-mono);letter-spacing:.08em;color:var(--muted);padding-top:4px}
+.group-h b{font:700 18px/1 var(--f-display);letter-spacing:0;color:var(--ink)}
+.ticket{display:grid;grid-template-columns:100px minmax(0,1fr);background:var(--card);border-radius:16px;box-shadow:var(--shadow)}
+.stub{border-right:2px dashed var(--line);position:relative;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:2px;padding:16px 8px;text-align:center}
+.stub::before,.stub::after{content:"";position:absolute;right:-9px;width:16px;height:16px;border-radius:50%;background:var(--paper)}
+.stub::before{top:-8px}.stub::after{bottom:-8px}
+.stub .wd{font-size:12px;color:var(--muted)}
+.stub .d{font:700 42px/1 var(--f-display);font-variant-numeric:tabular-nums}
+.stub .m{font:600 14px/1.2 var(--f-display)}
+.stub .y{font:500 11px var(--f-mono);color:var(--muted)}
+.ticket[data-kind="upcoming"] .stub .d{color:var(--accent)}
+.ticket[data-kind="wish"] .stub .d{color:var(--sky)}
+.ticket[data-kind="past"] .stub .d{color:var(--mint)}
+.tbody{padding:14px 16px;display:flex;flex-direction:column;gap:10px;min-width:0}
+.thead{display:flex;gap:8px;align-items:flex-start;justify-content:space-between;flex-wrap:wrap}
+.thead h3{font-size:20px;overflow-wrap:anywhere}
+.pill{font:600 12px/1 var(--f-body);padding:5px 10px;border-radius:999px;white-space:nowrap}
+.pill.wish{background:var(--sky-soft);color:var(--sky)}
+.pill.upcoming{background:var(--accent-soft);color:var(--accent)}
+.pill.past{background:var(--mint-soft);color:var(--mint)}
+.meta{display:flex;flex-wrap:wrap;gap:4px 14px;font-size:13px;color:var(--muted)}
+.meta b{color:var(--ink);font-weight:600}
+.note{font-size:14px;white-space:pre-wrap;overflow-wrap:anywhere;margin:0;color:var(--ink)}
+.rate{display:flex;align-items:center;gap:2px}
+.rate button{border:0;background:none;padding:0 2px;font-size:20px;line-height:1;cursor:pointer;color:var(--line)}
+.rate button.on{color:var(--star)}
+.rate button:disabled{cursor:default}
+.photos{display:grid;grid-template-columns:repeat(auto-fill,minmax(76px,1fr));gap:6px}
+.ph{aspect-ratio:1;max-width:100%;border:0;padding:0;border-radius:10px;overflow:hidden;background:var(--paper);cursor:pointer;display:flex;align-items:center;justify-content:center;color:var(--muted);font-size:12px;text-align:center}
+.ph img{width:100%;height:100%;object-fit:cover;display:block}
+.ph.add{border:1.5px dashed var(--line);background:transparent;font-size:13px;flex-direction:column}
+.ph.add:hover{border-color:var(--accent);color:var(--accent)}
+.ph.add:focus-within{outline:2px solid var(--accent);outline-offset:2px}
+.sec{border-top:1px solid var(--line);padding-top:10px;display:flex;flex-direction:column;gap:8px}
+.sec-t{display:flex;justify-content:space-between;align-items:baseline;gap:8px;flex-wrap:wrap}
+.sec-t b{font-variant-numeric:tabular-nums}
+.exlist{display:flex;flex-direction:column}
+.exrow{display:grid;grid-template-columns:auto minmax(0,1fr) auto auto auto;gap:4px 10px;align-items:center;padding:5px 0;border-bottom:1px dashed var(--line);font-size:14px}
+.exrow:last-child{border-bottom:0}
+.exrow .cat{font-size:11px;padding:2px 8px;border-radius:999px;background:var(--paper);color:var(--muted);white-space:nowrap}
+.exrow .lbl{overflow-wrap:anywhere}
+.exrow .who{font-size:12px;color:var(--muted);white-space:nowrap}
+.exrow .amt{font-weight:600;font-variant-numeric:tabular-nums;text-align:right}
+.x{border:0;background:none;color:var(--muted);cursor:pointer;font-size:16px;line-height:1;padding:2px 6px}
+.x:hover{color:var(--accent)}
+.payers{font-size:13px;color:var(--muted);display:flex;gap:4px 14px;flex-wrap:wrap}
+.payers b{color:var(--ink);font-variant-numeric:tabular-nums}
+.exform{display:grid;grid-template-columns:minmax(0,2fr) minmax(0,1fr) minmax(0,1.2fr) minmax(0,1.1fr) minmax(0,1.3fr) auto;gap:6px}
+.exform input,.exform select{border:1px solid var(--line);background:var(--paper);border-radius:8px;padding:6px 8px;font-size:14px;width:100%;min-width:0}
+@media (max-width:700px){.exform{grid-template-columns:minmax(0,1fr) minmax(0,1fr)}.exform input:first-child{grid-column:1/-1}.exrow{grid-template-columns:auto minmax(0,1fr) auto auto}.exrow .who{grid-column:2;grid-row:2}}
+.remind{display:flex;gap:6px;flex-wrap:wrap;align-items:center}
+.remind .cd{font:600 14px var(--f-display);color:var(--accent);margin-right:4px}
+.actions{display:flex;gap:6px;flex-wrap:wrap;align-items:center}
+.actions .sp{flex:1}
+.ck ul{list-style:none;margin:0;padding:0;display:flex;flex-direction:column;gap:2px}
+.ck li{display:flex;align-items:center;gap:8px}
+.ck li label{flex:1;display:flex;gap:8px;align-items:center;cursor:pointer;min-width:0;overflow-wrap:anywhere}
+.ck li.done label span{text-decoration:line-through;color:var(--muted)}
+.ck input[type=checkbox]{accent-color:var(--accent);width:16px;height:16px}
+.ck form{display:flex;gap:6px}
+.ck form input{flex:1;min-width:0;border:1px solid var(--line);background:var(--paper);border-radius:999px;padding:5px 12px;font-size:14px}
+.empty{text-align:center;padding:36px 20px;color:var(--muted)}
+.empty h3{color:var(--ink);font-size:20px;margin-bottom:6px}
+
+/* spending */
+.sp-h{display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap}
+.yearnav{display:flex;align-items:center;gap:8px}
+.yearnav h2{font-size:22px;font-variant-numeric:tabular-nums}
+.round{border:1px solid var(--line);background:transparent;border-radius:999px;width:32px;height:32px;cursor:pointer;color:var(--ink)}
+.round:disabled{opacity:.35;cursor:default}
+.tiles{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:12px}
+@media (max-width:520px){.tiles{grid-template-columns:minmax(0,1fr) minmax(0,1fr)}.tiles .tile:first-child{grid-column:1/-1}}
+.tile{display:flex;flex-direction:column;gap:2px}
+.tile .v{font:700 26px/1.15 var(--f-display);font-variant-numeric:tabular-nums;overflow-wrap:anywhere}
+.tile .l{font-size:12px;color:var(--muted)}
+.chart{position:relative}
+.chart svg{display:block;width:100%;height:auto;overflow:visible}
+.chart .grid{stroke:var(--line);stroke-width:1}
+.chart .axis{fill:var(--muted);font:11px var(--f-mono)}
+.chart .mlab{fill:var(--muted);font:12px var(--f-body)}
+.chart .mlab.sel{fill:var(--ink);font-weight:600}
+.chart .vlab{fill:var(--ink);font:600 12px var(--f-mono)}
+.chart .bar{fill:var(--bar)}
+.chart .bar.sel{fill:var(--accent)}
+.chart .hit{fill:transparent;cursor:pointer}
+.chart .hit:hover + .bar,.chart .hit:focus + .bar{fill:var(--accent)}
+.tip{position:absolute;top:0;transform:translateX(-50%);background:var(--ink);color:var(--card);font-size:13px;padding:6px 10px;border-radius:8px;pointer-events:none;white-space:nowrap;z-index:2}
+.split{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:16px}
+@media (max-width:700px){.split{grid-template-columns:minmax(0,1fr)}}
+.hbars{display:flex;flex-direction:column;gap:8px}
+.hb{display:grid;grid-template-columns:88px minmax(0,1fr) auto;gap:8px;align-items:center;font-size:13px}
+.hb .track{height:10px;background:var(--paper);border-radius:5px;overflow:hidden}
+.hb .fill{height:100%;background:var(--accent);border-radius:0 5px 5px 0}
+.hb .v{font-variant-numeric:tabular-nums;font-weight:600}
+.mtrips{display:flex;flex-direction:column}
+.mtrips button{display:flex;justify-content:space-between;gap:10px;border:0;border-bottom:1px dashed var(--line);background:none;padding:7px 0;cursor:pointer;text-align:left;font-size:14px}
+.mtrips button:last-child{border-bottom:0}
+.mtrips b{font-variant-numeric:tabular-nums}
+.tablewrap{overflow-x:auto}
+table{border-collapse:collapse;width:100%;font-size:14px}
+th,td{padding:6px 8px;border-bottom:1px solid var(--line);text-align:left}
+td.r,th.r{text-align:right;font-variant-numeric:tabular-nums}
+summary{cursor:pointer;color:var(--muted);font-size:13px}
+h3.sm{font-size:15px;margin-bottom:10px}
+
+/* both-free view */
+.fcal{display:grid;grid-template-columns:repeat(7,minmax(0,1fr));gap:4px}
+.fcal .wd{font-size:12px;color:var(--muted);text-align:center}
+.fc{border:1px solid var(--line);background:var(--card);border-radius:10px;min-height:58px;padding:5px 4px;display:flex;flex-direction:column;align-items:center;gap:3px;cursor:pointer;color:var(--ink);font-size:14px;font-variant-numeric:tabular-nums;min-width:0}
+.fc:disabled{cursor:default}
+.fc.out{visibility:hidden}
+.fc.wk{background:var(--mint-soft);border-color:transparent}
+.fc.both{background:var(--mint);color:var(--card);border-color:var(--mint);font-weight:700}
+.fc.past{opacity:.45}
+.fc.today>span:first-child{text-decoration:underline;text-underline-offset:3px}
+.fc .tags{display:flex;flex-direction:column;gap:2px;width:100%}
+.fc .tg{font-size:10px;line-height:1.3;border-radius:4px;padding:0 3px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;text-align:center}
+.tg.me{background:var(--accent-soft);color:var(--accent)}
+.tg.pt{background:var(--sky-soft);color:var(--sky)}
+.tg.hol{background:var(--amber-soft);color:var(--amber)}
+.fc.both .tg{background:rgba(255,255,255,.22);color:inherit}
+.sw{width:12px;height:12px;border-radius:3px;display:inline-block}
+.sw.me{background:var(--accent-soft);border:1px solid var(--accent)}.sw.pt{background:var(--sky-soft);border:1px solid var(--sky)}
+.sw.both{background:var(--mint)}.sw.wk{background:var(--mint-soft)}.sw.hol{background:var(--amber-soft);border:1px solid var(--amber)}
+.stretch{display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap;padding:8px 0;border-bottom:1px dashed var(--line)}
+.stretch:last-child{border-bottom:0}
+.stretch b{font-family:var(--f-display)}
+.stretch .sub{font-size:13px;color:var(--muted)}
+.lvrow{display:grid;grid-template-columns:auto minmax(0,1fr) auto auto;gap:8px;align-items:center;padding:5px 0;border-bottom:1px dashed var(--line);font-size:14px}
+.lvrow:last-child{border-bottom:0}
+.lvrow .sub{font-size:12px;color:var(--muted);overflow-wrap:anywhere}
+.badge{font-size:11px;padding:2px 8px;border-radius:999px;white-space:nowrap}
+.badge.ok{background:var(--mint-soft);color:var(--mint)}.badge.wait{background:var(--amber-soft);color:var(--amber)}
+.bulk{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:8px;align-items:end}
+.bulk .field input,.bulk .field select{padding:7px 9px}
+.bulk .chk{display:flex;gap:6px;align-items:center;font-size:13px;grid-column:1/-1}
+@media (max-width:620px){.bulk{grid-template-columns:minmax(0,1fr) minmax(0,1fr)}.fc{min-height:48px}.fc .tg{font-size:9px}}
+
+/* aside */
+.aside{display:flex;flex-direction:column;gap:16px;min-width:0}
+.cal-h{display:flex;align-items:center;justify-content:space-between;gap:8px;margin-bottom:10px}
+.cal-h h3{font-size:16px}
+.cal{display:grid;grid-template-columns:repeat(7,minmax(0,1fr));gap:3px}
+.cal .wd{font-size:11px;color:var(--muted);text-align:center;padding-bottom:4px}
+.cal .c{border:0;background:transparent;border-radius:8px;min-height:40px;padding:4px 2px;display:flex;flex-direction:column;align-items:center;gap:3px;cursor:pointer;color:var(--ink);font-size:13px;font-variant-numeric:tabular-nums}
+.cal .c:hover{background:var(--paper)}
+.cal .c.out{visibility:hidden}
+.cal .c.today>span{background:var(--ink);color:var(--card);border-radius:999px;padding:0 6px}
+.cal .bars{display:flex;flex-direction:column;gap:2px;width:100%;padding-inline:2px}
+.cal .cb{height:4px;border-radius:2px}
+.cb.upcoming,.dot.upcoming{background:var(--accent)}.cb.past,.dot.past{background:var(--mint)}
+.legend{display:flex;gap:12px;flex-wrap:wrap;font-size:12px;color:var(--muted);margin-top:10px}
+.legend span{display:inline-flex;align-items:center;gap:5px}
+.dot{width:8px;height:8px;border-radius:50%;display:inline-block}
+.mstat{display:flex;flex-direction:column;gap:4px}
+.mstat .v{font:700 28px/1.1 var(--f-display);font-variant-numeric:tabular-nums}
+.mstat .l{font-size:12px;color:var(--muted)}
+.mstat .row{display:flex;justify-content:space-between;gap:8px;font-size:13px;color:var(--muted)}
+.mstat .row b{color:var(--ink);font-variant-numeric:tabular-nums}
+
+/* lightbox + toast */
+.lb{position:fixed;inset:0;background:var(--scrim);z-index:30;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:12px;padding:calc(16px + env(safe-area-inset-top,0px)) max(16px,env(safe-area-inset-right,0px)) calc(16px + env(safe-area-inset-bottom,0px)) max(16px,env(safe-area-inset-left,0px))}
+.lb img{max-width:100%;max-height:calc(100% - 70px);object-fit:contain;border-radius:8px}
+.lb .bar2{display:flex;gap:8px;align-items:center;flex-wrap:wrap;justify-content:center;color:#fff;font-size:14px}
+.lb .btn-ghost{color:#fff;border-color:rgba(255,255,255,.4)}
+.lb .btn-ghost:hover{background:rgba(255,255,255,.1)}
+.toast{position:fixed;left:50%;transform:translateX(-50%);bottom:calc(20px + env(safe-area-inset-bottom,0px));background:var(--ink);color:var(--card);padding:8px 10px 8px 16px;border-radius:999px;font-size:14px;box-shadow:var(--shadow);z-index:40;max-width:calc(100% - 32px);display:flex;gap:10px;align-items:center}
+.toast button{border:0;background:var(--card);color:var(--ink);border-radius:999px;padding:3px 12px;cursor:pointer;font-size:13px;font-weight:600}
+@media (max-width:520px){
+  .hero{grid-template-columns:minmax(0,1fr);padding:18px}
+  .hero .count{font-size:52px}
+  .pair{justify-content:flex-start}.pair .names{text-align:left}
+  .ticket{grid-template-columns:72px minmax(0,1fr)}
+  .stub .d{font-size:32px}
+  .tbody{padding:12px}
+}
+@media (prefers-reduced-motion:no-preference){.ticket{transition:transform .15s}.ticket:hover{transform:translateY(-1px)}}
+</style>
+
+<div class="wrap">
+  <section class="hero" id="hero" aria-live="polite"></section>
+  <div id="banner" class="banner" hidden></div>
+  <div class="main">
+    <div class="col">
+      <div class="toolbar">
+        <div class="tabs" id="tabs" role="group" aria-label="มุมมอง"></div>
+        <button class="btn" id="addBtn" type="button">+ เพิ่มทริป</button>
+      </div>
+      <form class="panel form" id="tripForm" hidden novalidate>
+        <h3 id="formTitle">เพิ่มทริป</h3>
+        <div class="field full"><span class="lab">ทริปนี้</span>
+          <div class="modes" role="radiogroup">
+            <label><input type="radio" name="fmode" id="f-mode-dated" value="dated" checked> มีวันแล้ว (ไปมาแล้ว หรือนัดแล้ว)</label>
+            <label><input type="radio" name="fmode" id="f-mode-wish" value="wish"> อยากไป ยังไม่มีวัน</label>
+          </div></div>
+        <div class="field full"><label for="f-title">ไปไหน</label><input id="f-title" maxlength="80" placeholder="เช่น เขาใหญ่, เชียงคาน, โตเกียว" required></div>
+        <div class="field dated"><label for="f-start">วันไป</label><input id="f-start" type="date"></div>
+        <div class="field dated"><label for="f-end">วันกลับ</label><input id="f-end" type="date"></div>
+        <div class="field"><label for="f-kind">แนวทริป</label>
+          <select id="f-kind"><option>ทะเล</option><option>ภูเขา</option><option>เมือง</option><option>คาเฟ่ & ของกิน</option><option>ต่างประเทศ</option><option>อื่นๆ</option></select></div>
+        <div class="field full"><label for="f-note">บันทึก</label><textarea id="f-note" maxlength="2000" placeholder="ไปทำอะไรมาบ้าง ร้านที่ชอบ ที่พัก เรื่องประทับใจ"></textarea></div>
+        <div class="row"><span class="err" id="formErr"></span><button type="button" class="btn-ghost" id="cancelBtn">ยกเลิก</button><button type="submit" class="btn">บันทึก</button></div>
+      </form>
+      <div id="list" class="col"></div>
+      <div id="spend" class="col" hidden></div>
+      <div id="free" class="col" hidden></div>
+    </div>
+    <aside class="aside">
+      <div class="panel" id="calPanel"></div>
+      <div class="panel mstat" id="mstat"></div>
+    </aside>
+  </div>
+</div>
+<div class="lb" id="lb" hidden role="dialog" aria-modal="true" aria-label="ดูรูป"></div>
+<div class="toast" id="toast" hidden role="status"></div>
+
+<script>
+(() => {
+const $ = s => document.querySelector(s);
+function h(tag, attrs, ...kids){
+  const el = document.createElement(tag);
+  for (const [k,v] of Object.entries(attrs||{})){
+    if (v==null || v===false) continue;
+    if (k==='class') el.className = v;
+    else if (k==='text') el.textContent = v;
+    else if (k.startsWith('on')) el.addEventListener(k.slice(2), v);
+    else el.setAttribute(k, v===true ? '' : v);
+  }
+  for (const c of kids.flat()){ if (c==null || c===false) continue; el.append(c instanceof Node ? c : document.createTextNode(String(c))); }
+  return el;
+}
+const blobUrl = id => (window.tripBlobUrl ? window.tripBlobUrl(id) : '/_blob/' + id);
+const SVGNS = 'http://www.w3.org/2000/svg';
+function s(tag, attrs, ...kids){
+  const el = document.createElementNS(SVGNS, tag);
+  for (const [k,v] of Object.entries(attrs||{})){
+    if (v==null || v===false) continue;
+    if (k==='text') el.textContent = v;
+    else if (k.startsWith('on')) el.addEventListener(k.slice(2), v);
+    else el.setAttribute(k, v);
+  }
+  kids.flat().forEach(c => c && el.append(c));
+  return el;
+}
+const pad = n => String(n).padStart(2,'0');
+const iso = d => d.getFullYear()+'-'+pad(d.getMonth()+1)+'-'+pad(d.getDate());
+const parse = x => { const [y,m,d] = String(x).split('-').map(Number); return new Date(y, m-1, d); };
+const today = () => { const t = new Date(); return new Date(t.getFullYear(), t.getMonth(), t.getDate()); };
+const dayDiff = (a,b) => Math.round((b - a) / 864e5);
+const addDays = (d,n) => new Date(d.getFullYear(), d.getMonth(), d.getDate()+n);
+const ymd = d => iso(d).replace(/-/g,'');
+const fmt = o => new Intl.DateTimeFormat('th-TH', o);
+const fDay = fmt({day:'numeric', month:'short'}), fFull = fmt({weekday:'short', day:'numeric', month:'short', year:'numeric'});
+const fMon = fmt({month:'short'}), fWd = fmt({weekday:'short'}), fMonth = fmt({month:'long', year:'numeric'});
+const beYear = y => y + 543;
+const baht = n => '฿' + Math.round(Number(n)||0).toLocaleString('th-TH');
+const bahtShort = n => n >= 1000 ? '฿' + (Math.round(n/100)/10).toLocaleString('th-TH') + 'k' : '฿' + Math.round(n);
+const KIND = {past:'ไปมาแล้ว', upcoming:'กำลังจะไป', wish:'อยากไป'};
+const CATS = ['ที่พัก','เดินทาง','อาหาร','เที่ยว/ตั๋ว','ช้อปปิ้ง','อื่นๆ'];
+const uid = () => Date.now().toString(36) + Math.random().toString(36).slice(2,6);
+
+const LEAVE = {AL:'ลาพักร้อน', comp:'หยุดชดเชย', off:'วันหยุด'};
+const LEAVE_SHORT = {AL:'ลา', comp:'ชดเชย', off:'หยุด'};
+const S = { trips:[], expenses:[], photos:[], leaves:[], holidays:[], isOwner:false, fcal:null, bulk:null, members:{}, me:null, profiles:{}, tab:'past', cal:null, editing:null,
+  openCk:new Set(), openEx:new Set(), confirmDel:null, readOnly:false, mode:'loading', drafts:{},
+  year:today().getFullYear(), selMonth:null, uploading:{}, lightbox:null, lbConfirm:false, byTrip:{} };
+{ const t = today(); S.cal = new Date(t.getFullYear(), t.getMonth(), 1); S.fcal = new Date(t.getFullYear(), t.getMonth(), 1); }
+
+/* ---------- storage: shared db, or this-browser fallback ---------- */
+let db = null, user = null, assets = null;
+const LKEY = 'our-trips-journal';
+const local = {
+  load(){ try { return JSON.parse(localStorage.getItem(LKEY) || '{}') || {}; } catch { return {}; } },
+  save(){ try { localStorage.setItem(LKEY, JSON.stringify({trips:S.trips, expenses:S.expenses, photos:S.photos, leaves:S.leaves})); } catch {} }
+};
+const chains = {};
+function queue(key, fn){
+  const p = (chains[key] || Promise.resolve()).then(fn, fn);
+  chains[key] = p.catch(() => {});
+  return p.catch(e => { writeErr(e); throw e; });
+}
+function writeErr(e){
+  const code = e && e.code;
+  if (code === 'invalid_argument') { S.readOnly = true; toast('บันทึกไม่ได้ คุณมีสิทธิ์ดูอย่างเดียว'); render(); }
+  else if (code === 'quota_exceeded') toast('พื้นที่เก็บข้อมูลเต็ม ลองลบข้อมูลเก่าที่ไม่ใช้แล้ว');
+  else toast('บันทึกไม่สำเร็จ ลองอีกครั้ง');
+}
+const store = {
+  add(col, data){
+    if (db) return queue(col+':new', () => db.collection(col).add(data));
+    S[col].push({id:uid(), ...data}); local.save(); render(); return Promise.resolve();
+  },
+  set(col, id, data){
+    if (db) return queue(col+':'+id, () => db.doc(col+'/'+id).set(data));
+    const i = S[col].findIndex(x => x.id === id);
+    if (i >= 0) S[col][i] = {id, ...data}; else S[col].push({id, ...data});
+    local.save(); render(); return Promise.resolve();
+  },
+  update(col, id, patch){
+    if (db) return queue(col+':'+id, () => db.doc(col+'/'+id).update(patch));
+    const t = S[col].find(x => x.id === id); if (t) Object.assign(t, patch); local.save(); render(); return Promise.resolve();
+  },
+  remove(col, id){
+    if (db) return queue(col+':'+id, () => db.doc(col+'/'+id).delete());
+    S[col] = S[col].filter(x => x.id !== id); local.save(); render(); return Promise.resolve();
+  }
+};
+const quiet = p => p.catch(() => {});
+
+async function init(){
+  render();
+  const C = window.claude;
+  if (C && C.use) {
+    const r = await Promise.allSettled([C.use('db'), C.use('user'), C.use('assets')]);
+    db = r[0].value || null; user = r[1].value || null; assets = r[2].value || null;
+  }
+  if (!db) {
+    const L = local.load();
+    S.mode = 'local'; S.me = 'local-me'; S.members = {'local-me':1};
+    S.trips = L.trips || []; S.expenses = L.expenses || []; S.photos = L.photos || []; S.leaves = L.leaves || []; S.holidays = L.holidays || []; S.isOwner = true;
+    render(); return;
+  }
+  S.me = user ? await user.id() : null;
+  S.isOwner = user ? await user.isOwner() : false;
+  const canW = user ? await user.can('data.write') : null;
+  if (canW === false || !S.me) S.readOnly = true;
+  if (S.me && !S.readOnly) {
+    try {
+      const m = await db.doc('meta/members').get();
+      if (!m.exists) await db.doc('meta/members').set({ids:{[S.me]:Date.now()}});
+      else if (!(m.data().ids||{})[S.me]) await db.doc('meta/members').update({ids:{[S.me]:Date.now()}});
+    } catch (e) { if (e && e.code === 'invalid_argument') S.readOnly = true; }
+  }
+  const timer = setTimeout(() => { if (S.mode === 'loading' || S.mode === 'cache') { S.mode = 'slow'; render(); } }, 10000);
+  db.collection('trips').onSnapshot(snap => {
+    S.trips = snap.docs.map(d => ({id:d.id, ...d.data()}));
+    if (!snap.metadata.fromCache) { clearTimeout(timer); S.mode = 'db'; }
+    else if (S.mode === 'loading') S.mode = 'cache';
+    render(); refreshProfiles();
+  }, () => { clearTimeout(timer); S.mode = 'error'; render(); });
+  db.collection('expenses').onSnapshot(snap => { S.expenses = snap.docs.map(d => ({id:d.id, ...d.data()})); render(); refreshProfiles(); }, () => {});
+  db.collection('photos').onSnapshot(snap => { S.photos = snap.docs.map(d => ({id:d.id, ...d.data()})); render(); }, () => {});
+  db.collection('leaves').onSnapshot(snap => { S.leaves = snap.docs.map(d => ({id:d.id, ...d.data()})); render(); }, () => {});
+  db.collection('holidays').onSnapshot(snap => { S.holidays = snap.docs.map(d => ({id:d.id, ...d.data()})); render(); }, () => {});
+  db.doc('meta/members').onSnapshot(x => { S.members = x.exists ? {...(x.data().ids || {})} : {}; render(); refreshProfiles(); }, () => {});
+}
+
+let profKey = '';
+async function refreshProfiles(){
+  if (!user) return;
+  const ids = people();
+  S.trips.forEach(t => t.createdBy && ids.push(t.createdBy));
+  S.expenses.forEach(e => e.paidBy && e.paidBy !== 'split' && ids.push(e.paidBy));
+  const uniq = [...new Set(ids.filter(Boolean))];
+  if (!uniq.length) return;
+  const ps = await user.profiles(uniq);
+  const key = JSON.stringify(uniq.map(i => [i, ps[i] && ps[i].name, ps[i] && ps[i].avatarUrl]));
+  if (key !== profKey) { profKey = key; S.profiles = ps; render(); }
+}
+function people(){
+  const ids = Object.keys(S.members).sort((a,b) => (S.members[a]||0) - (S.members[b]||0));
+  if (S.me && !ids.includes(S.me)) ids.unshift(S.me);
+  return ids.sort((a,b) => (a === S.me ? -1 : b === S.me ? 1 : 0));
+}
+function nameOf(id){
+  const p = S.profiles[id];
+  if (p && p.name) return id === S.me ? p.name + ' (ฉัน)' : p.name;
+  return id === S.me ? 'ฉัน' : 'แฟน';
+}
+function shortName(id){
+  if (id === 'split') return 'หารกัน';
+  if (id === S.me) return 'ฉัน';
+  const p = S.profiles[id]; return (p && p.name) ? p.name.split(' ')[0] : 'แฟน';
+}
+function avatarOf(id){ const p = S.profiles[id]; return p && p.avatarUrl; }
+
+/* ---------- derived ---------- */
+function kindOf(t){
+  if (t.wish || !t.start) return 'wish';
+  return parse(t.end || t.start) >= today() ? 'upcoming' : 'past';
+}
+function tripTotal(id){ return (S.byTrip[id] || []).reduce((a,e) => a + (Number(e.amount)||0), 0); }
+function rangeText(t){
+  const a = parse(t.start), b = parse(t.end || t.start);
+  return dayDiff(a,b) === 0 ? fFull.format(a) : fDay.format(a) + ' – ' + fFull.format(b);
+}
+function lengthText(t){
+  const n = dayDiff(parse(t.start), parse(t.end || t.start));
+  return n <= 0 ? 'ไปเช้าเย็นกลับ' : (n+1) + ' วัน ' + n + ' คืน';
+}
+function expDate(e){
+  if (e.date) return e.date;
+  const t = S.trips.find(x => x.id === e.tripId); return t && t.start ? t.start : iso(today());
+}
+
+/* ---------- rendering ---------- */
+function render(){
+  const a = document.activeElement, aid = a && a.id, sel = a && a.selectionStart;
+  S.byTrip = {};
+  for (const e of S.expenses) (S.byTrip[e.tripId] = S.byTrip[e.tripId] || []).push(e);
+  renderHero(); renderBanner(); renderTabs();
+  const spend = S.tab === 'spend', free = S.tab === 'free';
+  $('#list').hidden = spend || free; $('#spend').hidden = !spend; $('#free').hidden = !free;
+  if (spend) renderSpend(); else if (free) renderFree(); else renderList();
+  renderCal(); renderMStat(); renderLightbox();
+  $('#addBtn').hidden = S.readOnly;
+  if (aid) { const el = document.getElementById(aid); if (el && el !== document.activeElement) { el.focus(); try { if (sel != null) el.setSelectionRange(sel, sel); } catch {} } }
+}
+
+function renderHero(){
+  const el = $('#hero'); el.replaceChildren();
+  const left = h('div', {}), t0 = today();
+  const next = S.trips.filter(t => kindOf(t) === 'upcoming').sort((a,b) => a.start.localeCompare(b.start))[0];
+  if (S.mode === 'loading') {
+    left.append(h('div',{class:'eyebrow',text:'ทริปของเรา'}), h('div',{class:'dest',text:'กำลังโหลด…'}));
+  } else if (next) {
+    const d = dayDiff(t0, parse(next.start));
+    left.append(h('div',{class:'eyebrow',text: d <= 0 ? 'ตอนนี้' : 'ทริปถัดไป'}));
+    if (d <= 0) left.append(h('div',{class:'big'}, h('span',{class:'unit',text:'กำลังเที่ยวอยู่'})));
+    else if (d === 1) left.append(h('div',{class:'big'}, h('span',{class:'count',text:'พรุ่งนี้'})));
+    else left.append(h('div',{class:'big'}, h('span',{class:'unit',text:'อีก'}), h('span',{class:'count',text:d}), h('span',{class:'unit',text:'วัน'})));
+    left.append(h('div',{class:'dest',text:next.title}), h('div',{class:'when',text:rangeText(next) + ' · ' + lengthText(next)}));
+  } else {
+    const y = t0.getFullYear();
+    const n = S.trips.filter(t => kindOf(t) === 'past' && parse(t.start).getFullYear() === y).length;
+    const spent = S.expenses.filter(e => expDate(e).startsWith(y+'-')).reduce((a,e) => a + (Number(e.amount)||0), 0);
+    left.append(h('div',{class:'eyebrow',text:'ปี ' + beYear(y)}),
+      h('div',{class:'big'}, h('span',{class:'unit',text:'เที่ยวไปแล้ว'}), h('span',{class:'count',text:n}), h('span',{class:'unit',text:'ทริป'})),
+      h('div',{class:'when',text: spent ? 'ใช้ไปทั้งหมด ' + baht(spent) : 'เพิ่มทริปที่ไปมาแล้ว เก็บรูปและค่าใช้จ่ายไว้ดูทีหลัง'}));
+  }
+  const ids = people().slice(0, 2);
+  el.append(left, h('div',{class:'pair'},
+    h('div',{class:'names'}, ids.map(nameOf).join(' & '), ids.length < 2 ? h('div',{text:'รอแฟนเปิดลิงก์นี้'}) : null),
+    h('div',{class:'avs'}, ids.map(id => avatarOf(id) ? h('img',{src:avatarOf(id), alt:''}) : null))));
+}
+
+function renderBanner(){
+  const b = $('#banner'); let msg = '';
+  if (S.mode === 'local') msg = 'ตอนนี้บันทึกไว้ในเบราว์เซอร์นี้เท่านั้น เปิดผ่านลิงก์ claude.ai เพื่อใช้ร่วมกับแฟน';
+  else if (S.mode === 'slow') msg = 'ยังเชื่อมต่อข้อมูลไม่ได้ รอสักครู่ ข้อมูลอาจยังไม่อัปเดต';
+  else if (S.mode === 'error') msg = 'โหลดข้อมูลไม่สำเร็จ ลองเปิดหน้านี้ใหม่';
+  else if (S.readOnly && S.mode !== 'loading') msg = 'คุณดูได้อย่างเดียว ขอให้เจ้าของหน้าแชร์สิทธิ์แก้ไขให้ก่อน';
+  b.textContent = msg; b.hidden = !msg;
+}
+
+function renderTabs(){
+  const el = $('#tabs'); el.replaceChildren();
+  const cnt = k => S.trips.filter(t => kindOf(t) === k).length;
+  for (const [k,label] of [['past','บันทึกการเที่ยว'],['upcoming','กำลังจะไป'],['wish','อยากไป'],['free','วันว่างตรงกัน'],['spend','ค่าใช้จ่าย']])
+    el.append(h('button',{type:'button','aria-pressed':String(S.tab===k), onclick:()=>{S.tab=k; S.confirmDel=null; render();}},
+      label, (k === 'spend' || k === 'free') ? null : h('span',{class:'n',text:cnt(k)})));
+}
+
+function renderList(){
+  const el = $('#list'); el.replaceChildren();
+  if (S.mode === 'loading') { el.append(h('div',{class:'panel empty'}, h('p',{text:'กำลังโหลดทริป…'}))); return; }
+  const items = S.trips.filter(t => kindOf(t) === S.tab);
+  if (!items.length) {
+    const E = {
+      past: ['ยังไม่มีบันทึกการเที่ยว', 'กด “เพิ่มทริป” ใส่ทริปที่เคยไปด้วยกัน แล้วเพิ่มรูป ค่าใช้จ่าย และคะแนนได้'],
+      upcoming: ['ยังไม่มีทริปที่นัดไว้', 'เพิ่มทริปที่มีวันแล้ว หรือแตะวันในปฏิทิน'],
+      wish: ['ยังไม่มีที่ที่อยากไป', 'จดที่ที่อยากไปด้วยกันไว้ก่อน มีวันเมื่อไหร่ค่อยกด “ตั้งวันไป”']}[S.tab];
+    el.append(h('div',{class:'panel empty'}, h('h3',{text:E[0]}), h('p',{text: S.readOnly ? 'ยังไม่มีข้อมูลในหมวดนี้' : E[1]})));
+    return;
+  }
+  if (S.tab === 'past') {
+    items.sort((a,b) => b.start.localeCompare(a.start));
+    const years = {};
+    items.forEach(t => { const y = parse(t.start).getFullYear(); (years[y] = years[y] || []).push(t); });
+    Object.keys(years).sort((a,b) => b - a).forEach(y => {
+      const ts = years[y], tot = ts.reduce((a,t) => a + tripTotal(t.id), 0);
+      el.append(h('section',{class:'group'},
+        h('div',{class:'group-h'}, h('b',{text:beYear(+y)}), h('span',{text:ts.length + ' ทริป' + (tot ? ' · ใช้ไป ' + baht(tot) : '')})),
+        ts.map(ticket)));
+    });
+  } else if (S.tab === 'upcoming') {
+    items.sort((a,b) => a.start.localeCompare(b.start)).forEach(t => el.append(ticket(t)));
+  } else {
+    items.sort((a,b) => (b.createdAt||0) - (a.createdAt||0)).forEach(t => el.append(ticket(t)));
+  }
+}
+
+function ticket(t){
+  const k = kindOf(t), ro = S.readOnly, total = tripTotal(t.id);
+  const st = t.start ? parse(t.start) : null;
+  const stub = st
+    ? h('div',{class:'stub'}, h('span',{class:'wd',text:fWd.format(st)}), h('span',{class:'d',text:st.getDate()}), h('span',{class:'m',text:fMon.format(st)}), h('span',{class:'y',text:beYear(st.getFullYear())}))
+    : h('div',{class:'stub'}, h('span',{class:'d',text:'?'}), h('span',{class:'m',text:'ยังไม่มีวัน'}));
+  const meta = h('div',{class:'meta'},
+    st ? h('span',{}, rangeText(t)) : null, st ? h('span',{}, lengthText(t)) : null,
+    t.kind ? h('span',{}, t.kind) : null,
+    total ? h('span',{}, 'ใช้ไป ', h('b',{class:'num',text:baht(total)})) : null);
+
+  const body = h('div',{class:'tbody'},
+    h('div',{class:'thead'}, h('h3',{text:t.title||'ไม่มีชื่อ'}), h('span',{class:'pill '+k,text:KIND[k]})),
+    meta);
+
+  if (k === 'past') {
+    const r = Number(t.rating) || 0;
+    body.append(h('div',{class:'rate',role:'group','aria-label':'คะแนนทริปนี้'},
+      [1,2,3,4,5].map(n => h('button',{type:'button',class:n<=r?'on':null,'aria-label':n+' ดาว','aria-pressed':String(n===r),disabled:ro,
+        onclick:()=>quiet(store.update('trips',t.id,{rating: r===n ? 0 : n}))},'★'))));
+  }
+  if (t.note) body.append(h('p',{class:'note',text:t.note}));
+  if (k === 'upcoming') body.append(reminders(t));
+  if (k !== 'wish') {
+    const ph = photoStrip(t); if (ph) body.append(ph);
+    body.append(expenseSection(t, total));
+  }
+  if (k === 'upcoming') body.append(checklist(t));
+
+  const acts = h('div',{class:'actions'});
+  if (!ro) {
+    if (S.confirmDel === t.id) {
+      const nEx = (S.byTrip[t.id]||[]).length, nPh = S.photos.filter(p => p.tripId === t.id).length;
+      acts.append(h('span',{text:'ลบทริปนี้' + (nEx||nPh ? ' พร้อมค่าใช้จ่าย ' + nEx + ' รายการ และรูป ' + nPh + ' รูป' : '') + '?'}),
+        h('button',{type:'button',class:'btn-ghost danger',onclick:()=>deleteTrip(t)},'ลบเลย'),
+        h('button',{type:'button',class:'btn-ghost',onclick:()=>{S.confirmDel=null; render();}},'ไม่ลบ'));
+    } else {
+      if (k === 'wish') acts.append(h('button',{type:'button',class:'btn-ghost',onclick:()=>openForm(t, null, 'dated')},'ตั้งวันไป'));
+      acts.append(h('span',{class:'sp'}),
+        h('button',{type:'button',class:'link',onclick:()=>openForm(t)},'แก้ไข'),
+        h('button',{type:'button',class:'link',onclick:()=>{S.confirmDel=t.id; render();}},'ลบ'));
+    }
+  }
+  body.append(acts);
+  return h('article',{class:'ticket','data-kind':k,id:'trip-'+t.id}, stub, body);
+}
+
+function reminders(t){
+  const a = parse(t.start), b = parse(t.end || t.start), d = dayDiff(today(), a);
+  const gcal = 'https://calendar.google.com/calendar/render?' + new URLSearchParams({
+    action:'TEMPLATE', text:'เที่ยว ' + t.title, dates: ymd(a) + '/' + ymd(addDays(b,1)),
+    details: (t.note ? t.note + '\n\n' : '') + 'จากแอป ทริปของเรา'}).toString();
+  const msg = 'นัดเที่ยว ' + t.title + '\n' + rangeText(t) + ' (' + lengthText(t) + ')' + (d > 0 ? '\nอีก ' + d + ' วัน' : '');
+  return h('div',{class:'sec'},
+    h('div',{class:'remind'},
+      h('span',{class:'cd',text: d > 1 ? 'อีก ' + d + ' วัน' : d === 1 ? 'พรุ่งนี้' : 'กำลังเที่ยว'}),
+      h('a',{class:'btn-ghost',href:gcal,target:'_blank',rel:'noopener'},'เพิ่มลง Google Calendar'),
+      h('a',{class:'btn-ghost',href:'https://line.me/R/share?text=' + encodeURIComponent(msg),target:'_blank',rel:'noopener'},'ส่งให้แฟนทาง LINE'),
+      h('button',{type:'button',class:'btn-ghost',onclick:()=>copyText(msg)},'คัดลอกข้อความนัด')));
+}
+function copyText(msg){
+  try { navigator.clipboard.writeText(msg).then(() => toast('คัดลอกแล้ว'), () => toast('คัดลอกไม่ได้ในหน้านี้')); }
+  catch { toast('คัดลอกไม่ได้ในหน้านี้'); }
+}
+
+/* photos */
+function photoStrip(t){
+  const ps = S.photos.filter(p => p.tripId === t.id).sort((a,b) => (a.createdAt||0) - (b.createdAt||0));
+  const canAdd = assets && !S.readOnly;
+  if (!ps.length && !canAdd) return null;
+  const up = S.uploading[t.id] || 0;
+  const inputId = 'up-' + t.id;
+  return h('div',{class:'photos'},
+    ps.map(p => h('button',{type:'button',class:'ph','aria-label':'ดูรูปขนาดใหญ่',onclick:()=>{S.lightbox=p.id; S.lbConfirm=false; render();}},
+      h('img',{src:blobUrl(p.assetId), alt:'', loading:'lazy', onerror:e=>{ e.target.replaceWith(document.createTextNode('โหลดรูปไม่ได้')); }}))),
+    canAdd ? h('label',{class:'ph add',for:inputId},
+      h('span',{text: up ? 'กำลังอัปโหลด ' + up + ' รูป' : '+ เพิ่มรูป'}),
+      h('input',{type:'file',id:inputId,class:'vh',accept:'image/*',multiple:true,onchange:e=>uploadPhotos(t.id, e.target.files)})) : null);
+}
+async function shrink(f){
+  try {
+    const bmp = await createImageBitmap(f, {imageOrientation:'from-image'});
+    const sc = Math.min(1, 1600 / Math.max(bmp.width, bmp.height));
+    const c = document.createElement('canvas'); c.width = Math.round(bmp.width*sc); c.height = Math.round(bmp.height*sc);
+    c.getContext('2d').drawImage(bmp, 0, 0, c.width, c.height);
+    const b = await new Promise(r => c.toBlob(r, 'image/jpeg', 0.82));
+    if (b) return b;
+  } catch {}
+  if (['image/jpeg','image/png','image/webp','image/gif'].includes(f.type)) return f;
+  throw {code:'unsupported_type'};
+}
+function photoErr(e){
+  const c = e && e.code;
+  if (c === 'too_large') return 'รูปใหญ่เกินไป';
+  if (c === 'unsupported_type') return 'เปิดไฟล์รูปนี้ไม่ได้ ลองใช้ JPG หรือ PNG';
+  if (c === 'quota_or_state') return 'พื้นที่เก็บรูปเต็มแล้ว ลองลบรูปที่ไม่ใช้';
+  if (c === 'rate_limited') return 'อัปโหลดถี่เกินไป รอสักครู่แล้วลองใหม่';
+  return 'อัปโหลดรูปไม่สำเร็จ';
+}
+async function uploadPhotos(tripId, files){
+  const list = [...(files||[])].slice(0, 20); if (!list.length || !assets) return;
+  S.uploading[tripId] = (S.uploading[tripId]||0) + list.length; render();
+  for (const f of list) {
+    try {
+      const blob = await shrink(f);
+      const r = await assets.upload(blob, {type: blob.type || 'image/jpeg'});
+      await store.add('photos', {tripId, assetId:r.id, createdBy:S.me, createdAt:Date.now()});
+    } catch (e) { if (!(e && e.code && ['invalid_argument','quota_exceeded','unavailable'].includes(e.code))) toast(photoErr(e)); }
+    finally { S.uploading[tripId]--; render(); }
+  }
+}
+function renderLightbox(){
+  const el = $('#lb');
+  const p = S.lightbox && S.photos.find(x => x.id === S.lightbox);
+  if (!p) { if (!el.hidden) { el.hidden = true; el.replaceChildren(); el.dataset.key = ''; } return; }
+  const key = p.id + ':' + S.lbConfirm + ':' + S.readOnly;
+  if (el.dataset.key === key && !el.hidden) return;
+  el.dataset.key = key; el.replaceChildren();
+  const t = S.trips.find(x => x.id === p.tripId);
+  const ps = S.photos.filter(x => x.tripId === p.tripId).sort((a,b) => (a.createdAt||0) - (b.createdAt||0));
+  const i = ps.findIndex(x => x.id === p.id);
+  const go = d => { const n = ps[(i + d + ps.length) % ps.length]; S.lightbox = n.id; S.lbConfirm = false; render(); };
+  const canDel = assets && !S.readOnly;
+  el.append(h('img',{src:blobUrl(p.assetId), alt: t ? 'รูปจากทริป ' + t.title : ''}),
+    h('div',{class:'bar2'},
+      ps.length > 1 ? h('button',{type:'button',class:'btn-ghost',onclick:()=>go(-1)},'‹ ก่อนหน้า') : null,
+      h('span',{text:(t ? t.title + ' · ' : '') + (i+1) + '/' + ps.length}),
+      ps.length > 1 ? h('button',{type:'button',class:'btn-ghost',onclick:()=>go(1)},'ถัดไป ›') : null),
+    h('div',{class:'bar2'},
+      canDel ? (S.lbConfirm
+        ? [h('span',{text:'ลบรูปนี้ถาวร?'}), h('button',{type:'button',class:'btn-ghost',onclick:()=>deletePhoto(p)},'ลบเลย'), h('button',{type:'button',class:'btn-ghost',onclick:()=>{S.lbConfirm=false; render();}},'ไม่ลบ')]
+        : h('button',{type:'button',class:'btn-ghost',onclick:()=>{S.lbConfirm=true; render();}},'ลบรูป')) : null,
+      h('button',{type:'button',class:'btn-ghost',id:'lbClose',onclick:closeLightbox},'ปิด')));
+  el.hidden = false;
+  setTimeout(() => { const c = $('#lbClose'); if (c && !el.contains(document.activeElement)) c.focus(); }, 0);
+}
+function closeLightbox(){ S.lightbox = null; S.lbConfirm = false; render(); }
+$('#lb').addEventListener('click', e => { if (e.target.id === 'lb') closeLightbox(); });
+document.addEventListener('keydown', e => { if (e.key === 'Escape' && S.lightbox) closeLightbox(); });
+async function deletePhoto(p){
+  try { if (assets) await assets.delete(p.assetId); }
+  catch (e) {
+    if (e && e.code === 'not_uploader') { toast('ลบได้เฉพาะรูปที่คุณอัปโหลดเอง'); S.lbConfirm = false; render(); return; }
+    toast('ลบรูปไม่สำเร็จ ลองอีกครั้ง'); return;
+  }
+  S.lightbox = null; S.lbConfirm = false;
+  quiet(store.remove('photos', p.id)); toast('ลบรูปแล้ว'); render();
+}
+
+/* expenses */
+function draftFor(t){
+  const k = 'ex-' + t.id;
+  if (!S.drafts[k]) S.drafts[k] = {label:'', amount:'', cat:'อาหาร', paidBy:'split', date: t.start || iso(today())};
+  return S.drafts[k];
+}
+function expenseSection(t, total){
+  const ex = (S.byTrip[t.id] || []).slice().sort((a,b) => expDate(a).localeCompare(expDate(b)) || (a.createdAt||0) - (b.createdAt||0));
+  const open = S.openEx.has(t.id) || (!ex.length && false);
+  const sec = h('div',{class:'sec'},
+    h('div',{class:'sec-t'},
+      h('button',{type:'button',class:'link','aria-expanded':String(open),onclick:()=>{open ? S.openEx.delete(t.id) : S.openEx.add(t.id); render();}},
+        'ค่าใช้จ่าย' + (ex.length ? ' ' + ex.length + ' รายการ' : '') + (open ? ' ▴' : ' ▾')),
+      total ? h('b',{text:baht(total)}) : h('span',{class:'payers',text: S.readOnly ? 'ยังไม่มี' : 'ยังไม่ได้ใส่'})));
+  if (!open) return sec;
+  if (ex.length) {
+    sec.append(h('div',{class:'exlist'}, ex.map(e => h('div',{class:'exrow'},
+      h('span',{class:'cat',text:e.cat||'อื่นๆ'}),
+      h('span',{class:'lbl',text:e.label||e.cat||'ค่าใช้จ่าย'}),
+      h('span',{class:'who',text:shortName(e.paidBy||'split') + ' · ' + fDay.format(parse(expDate(e)))}),
+      h('span',{class:'amt',text:baht(e.amount)}),
+      S.readOnly ? h('span') : h('button',{type:'button',class:'x','aria-label':'ลบ '+(e.label||''),onclick:()=>removeExpense(e)},'×')))));
+    const by = {};
+    ex.forEach(e => { const p = e.paidBy || 'split'; by[p] = (by[p]||0) + (Number(e.amount)||0); });
+    const keys = Object.keys(by);
+    if (keys.length > 1 || (keys[0] && keys[0] !== 'split'))
+      sec.append(h('div',{class:'payers'}, keys.map(p => h('span',{}, shortName(p) + 'จ่าย ', h('b',{text:baht(by[p])})))));
+  }
+  if (!S.readOnly) {
+    const d = draftFor(t), id = t.id;
+    const bind = f => e => { d[f] = e.target.value; };
+    const payers = [...people().slice(0,2).map(p => [p, shortName(p) + 'จ่าย']), ['split','หารกัน']];
+    if (people().length < 2) payers.splice(1, 0, ['partner','แฟนจ่าย']);
+    sec.append(h('form',{class:'exform',onsubmit:e=>{e.preventDefault(); addExpense(t, d);}},
+      h('input',{id:'exl-'+id,placeholder:'รายการ เช่น ค่าที่พัก',maxlength:'80',value:d.label,oninput:bind('label'),'aria-label':'รายการ'}),
+      h('input',{id:'exa-'+id,type:'number',min:'0',step:'any',inputmode:'decimal',placeholder:'บาท',value:d.amount,oninput:bind('amount'),'aria-label':'จำนวนเงิน (บาท)'}),
+      h('select',{id:'exc-'+id,onchange:bind('cat'),'aria-label':'หมวด'}, CATS.map(c => h('option',{value:c,selected:c===d.cat},c))),
+      h('select',{id:'exp-'+id,onchange:bind('paidBy'),'aria-label':'ใครจ่าย'}, payers.map(([v,l]) => h('option',{value:v,selected:v===d.paidBy},l))),
+      h('input',{id:'exd-'+id,type:'date',value:d.date,onchange:bind('date'),'aria-label':'วันที่จ่าย'}),
+      h('button',{type:'submit',class:'btn-ghost',id:'exb-'+id},'เพิ่ม')));
+  }
+  return sec;
+}
+function addExpense(t, d){
+  const amount = Math.round(parseFloat(d.amount) * 100) / 100;
+  if (!(amount > 0)) { toast('ใส่จำนวนเงินก่อน'); const a = document.getElementById('exa-'+t.id); a && a.focus(); return; }
+  const data = { tripId:t.id, label:(d.label||'').trim().slice(0,80) || d.cat, amount, cat:d.cat,
+    paidBy: d.paidBy, date: d.date || t.start || iso(today()), createdBy:S.me, createdAt:Date.now() };
+  quiet(store.add('expenses', data));
+  d.label = ''; d.amount = '';
+  render();
+  const l = document.getElementById('exl-'+t.id); l && l.focus();
+}
+function removeExpense(e){
+  const {id, ...rest} = e;
+  quiet(store.remove('expenses', id));
+  toast('ลบ “' + (e.label||'รายการ') + '” แล้ว', 'เลิกทำ', () => quiet(store.add('expenses', rest)));
+}
+
+/* checklist */
+function checklist(t){
+  const list = Array.isArray(t.checklist) ? t.checklist : [];
+  const doneN = list.filter(i => i.done).length, open = S.openCk.has(t.id), ro = S.readOnly;
+  const ck = h('div',{class:'sec ck'},
+    h('button',{type:'button',class:'link','aria-expanded':String(open),style:'align-self:flex-start',onclick:()=>{open ? S.openCk.delete(t.id) : S.openCk.add(t.id); render();}},
+      'ของต้องเตรียม' + (list.length ? ' (' + doneN + '/' + list.length + ')' : '') + (open ? ' ▴' : ' ▾')));
+  if (!open) return ck;
+  ck.append(h('ul',{}, list.map(it => h('li',{class:it.done?'done':null},
+    h('label',{}, h('input',{type:'checkbox',checked:!!it.done,disabled:ro,onchange:()=>quiet(store.update('trips',t.id,{checklist:list.map(x => x.id===it.id ? {...x, done:!x.done} : x)}))}), h('span',{text:it.text})),
+    ro ? null : h('button',{type:'button',class:'x','aria-label':'ลบ '+it.text,onclick:()=>quiet(store.update('trips',t.id,{checklist:list.filter(x => x.id!==it.id)}))},'×')))));
+  if (!ro) {
+    const inId = 'ck-' + t.id;
+    ck.append(h('form',{onsubmit:e=>{e.preventDefault(); const v=(S.drafts[inId]||'').trim(); if(!v) return; S.drafts[inId]='';
+        quiet(store.update('trips',t.id,{checklist:[...list,{id:uid(),text:v.slice(0,120),done:false}]})); render();}},
+      h('input',{id:inId,value:S.drafts[inId]||'',placeholder:'เพิ่ม เช่น ครีมกันแดด, จองที่พัก',maxlength:'120','aria-label':'เพิ่มของต้องเตรียม',oninput:e=>{S.drafts[inId]=e.target.value;}}),
+      h('button',{type:'submit',class:'btn-ghost'},'เพิ่ม')));
+  }
+  return ck;
+}
+
+async function deleteTrip(t){
+  S.confirmDel = null;
+  const ex = (S.byTrip[t.id] || []).slice(), ps = S.photos.filter(p => p.tripId === t.id);
+  try { await store.remove('trips', t.id); } catch { return; }
+  for (const e of ex) await quiet(store.remove('expenses', e.id));
+  for (const p of ps) { try { if (assets) await assets.delete(p.assetId); } catch {} await quiet(store.remove('photos', p.id)); }
+  toast('ลบทริปแล้ว'); render();
+}
+
+/* ---------- spending ---------- */
+function renderSpend(){
+  const el = $('#spend'); el.replaceChildren();
+  const Y = S.year, now = today(), curY = now.getFullYear();
+  const yearEx = S.expenses.filter(e => expDate(e).startsWith(Y + '-'));
+  const months = Array.from({length:12}, () => ({sum:0, trips:{}, cats:{}}));
+  yearEx.forEach(e => {
+    const m = parseInt(expDate(e).slice(5,7), 10) - 1, a = Number(e.amount) || 0, M = months[m];
+    M.sum += a; M.trips[e.tripId] = (M.trips[e.tripId]||0) + a; M.cats[e.cat||'อื่นๆ'] = (M.cats[e.cat||'อื่นๆ']||0) + a;
+  });
+  const total = months.reduce((a,m) => a + m.sum, 0);
+  const tripIds = new Set(yearEx.map(e => e.tripId));
+  if (S.selMonth == null || S.selMonth.y !== Y) {
+    let m = Y === curY ? now.getMonth() : months.reduce((bi,mm,i,arr) => mm.sum > arr[bi].sum ? i : bi, 0);
+    S.selMonth = {y:Y, m};
+  }
+  const sel = S.selMonth.m;
+  const years = S.expenses.map(e => +expDate(e).slice(0,4)).filter(Boolean);
+  const minY = Math.min(curY, ...years), maxY = Math.max(curY, ...years);
+
+  el.append(h('div',{class:'sp-h'},
+    h('div',{class:'yearnav'},
+      h('button',{type:'button',class:'round','aria-label':'ปีก่อน',disabled:Y<=minY,onclick:()=>{S.year--; S.selMonth=null; render();}},'‹'),
+      h('h2',{text:'ปี ' + beYear(Y)}),
+      h('button',{type:'button',class:'round','aria-label':'ปีถัดไป',disabled:Y>=maxY,onclick:()=>{S.year++; S.selMonth=null; render();}},'›'))));
+
+  el.append(h('div',{class:'panel tiles'},
+    h('div',{class:'tile'}, h('span',{class:'v',text:baht(total)}), h('span',{class:'l',text:'ค่าเที่ยวทั้งปี'})),
+    h('div',{class:'tile'}, h('span',{class:'v',text:baht(months[sel].sum)}), h('span',{class:'l',text:'เดือน' + fmt({month:'long'}).format(new Date(Y,sel,1))})),
+    h('div',{class:'tile'}, h('span',{class:'v',text: tripIds.size ? baht(total / tripIds.size) : '–'}), h('span',{class:'l',text:'เฉลี่ยต่อทริป (' + tripIds.size + ' ทริป)'}))));
+
+  const chartPanel = h('div',{class:'panel'}, h('h3',{class:'sm',text:'ใช้ไปเท่าไหร่ในแต่ละเดือน'}));
+  if (!total) chartPanel.append(h('p',{class:'empty',style:'padding:20px 0',text:'ปีนี้ยังไม่มีค่าใช้จ่าย เพิ่มได้ในการ์ดทริปแต่ละอัน ที่หัวข้อ “ค่าใช้จ่าย”'}));
+  else chartPanel.append(barChart(months, Y, sel));
+  el.append(chartPanel);
+
+  if (total) {
+    const M = months[sel];
+    const mt = Object.entries(M.trips).sort((a,b) => b[1] - a[1]);
+    const detail = h('div',{class:'panel'}, h('h3',{class:'sm',text:fMonth.format(new Date(Y,sel,1)) + ' · ' + baht(M.sum)}));
+    if (!mt.length) detail.append(h('p',{style:'color:var(--muted);margin:0',text:'เดือนนี้ไม่มีค่าใช้จ่าย แตะแท่งเดือนอื่นในกราฟเพื่อดูรายละเอียด'}));
+    else detail.append(h('div',{class:'split'},
+      h('div',{class:'mtrips'}, mt.map(([tid,a]) => { const t = S.trips.find(x => x.id === tid);
+        return h('button',{type:'button',onclick:()=>jumpTo(t)}, h('span',{text:t ? t.title : 'ทริปที่ถูกลบ'}), h('b',{text:baht(a)})); })),
+      hbars(M.cats)));
+    el.append(detail);
+
+    const cats = {}, payers = {};
+    yearEx.forEach(e => { const a = Number(e.amount)||0; cats[e.cat||'อื่นๆ'] = (cats[e.cat||'อื่นๆ']||0) + a; const p = e.paidBy||'split'; payers[p] = (payers[p]||0) + a; });
+    const pl = {}; Object.entries(payers).forEach(([p,a]) => { const n = shortName(p); pl[n] = (pl[n]||0) + a; });
+    el.append(h('div',{class:'split'},
+      h('div',{class:'panel'}, h('h3',{class:'sm',text:'ทั้งปี แยกตามหมวด'}), hbars(cats)),
+      h('div',{class:'panel'}, h('h3',{class:'sm',text:'ทั้งปี ใครจ่ายไปเท่าไหร่'}), hbars(pl))));
+
+    el.append(h('details',{class:'panel'}, h('summary',{text:'ดูเป็นตาราง'}),
+      h('div',{class:'tablewrap'}, h('table',{},
+        h('thead',{}, h('tr',{}, h('th',{text:'เดือน'}), h('th',{class:'r',text:'ทริป'}), h('th',{class:'r',text:'ใช้ไป'}))),
+        h('tbody',{}, months.map((m,i) => h('tr',{}, h('td',{text:fMonth.format(new Date(Y,i,1))}), h('td',{class:'r',text:Object.keys(m.trips).length || '–'}), h('td',{class:'r',text:m.sum ? baht(m.sum) : '–'}))),
+          h('tr',{}, h('th',{text:'รวม'}), h('th',{class:'r',text:tripIds.size}), h('th',{class:'r',text:baht(total)})))))));
+  }
+}
+function hbars(obj){
+  const rows = Object.entries(obj).filter(([,v]) => v > 0).sort((a,b) => b[1] - a[1]);
+  const max = rows.length ? rows[0][1] : 1;
+  return h('div',{class:'hbars'}, rows.map(([k,v]) => h('div',{class:'hb'},
+    h('span',{text:k}), h('div',{class:'track'}, h('div',{class:'fill',style:'width:' + Math.max(2, v/max*100) + '%'})), h('span',{class:'v',text:baht(v)}))));
+}
+function niceMax(v){
+  if (v <= 0) return 1000;
+  const p = Math.pow(10, Math.floor(Math.log10(v))), n = v / p;
+  return (n <= 1 ? 1 : n <= 2 ? 2 : n <= 2.5 ? 2.5 : n <= 5 ? 5 : 10) * p;
+}
+function barChart(months, Y, sel){
+  const W = 640, H = 230, L = 46, R = 8, T = 22, B = 28, pw = W - L - R, ph = H - T - B;
+  const max = niceMax(Math.max(...months.map(m => m.sum)));
+  const y = v => T + ph - v / max * ph, col = pw / 12, bw = Math.min(30, col * 0.62);
+  const wrapEl = h('div',{class:'chart'});
+  const tip = h('div',{class:'tip',hidden:true});
+  const svg = s('svg',{viewBox:`0 0 ${W} ${H}`,role:'img','aria-label':'กราฟค่าใช้จ่ายรายเดือน ปี ' + beYear(Y)});
+  [0, 0.5, 1].forEach(f => {
+    const v = max * f;
+    svg.append(s('line',{class:'grid',x1:L,x2:W-R,y1:y(v),y2:y(v)}), s('text',{class:'axis',x:L-6,y:y(v)+4,'text-anchor':'end',text:bahtShort(v)}));
+  });
+  const fShortM = fmt({month:'short'});
+  months.forEach((m,i) => {
+    const cx = L + col*i + col/2, x = cx - bw/2, top = y(m.sum), hgt = T + ph - top;
+    const show = e => { tip.textContent = fMonth.format(new Date(Y,i,1)) + ' · ' + baht(m.sum) + ' · ' + Object.keys(m.trips).length + ' ทริป'; tip.style.left = (cx / W * 100) + '%'; tip.hidden = false; };
+    const g = s('g',{});
+    g.append(s('rect',{class:'hit',x:L+col*i,y:T,width:col,height:ph+B,tabindex:'0',role:'button','aria-label':fMonth.format(new Date(Y,i,1)) + ' ' + baht(m.sum),
+      onmouseenter:show, onfocus:show, onmouseleave:()=>{tip.hidden=true;}, onblur:()=>{tip.hidden=true;},
+      onclick:()=>{S.selMonth={y:Y,m:i}; render();}, onkeydown:e=>{ if (e.key==='Enter'||e.key===' ') { e.preventDefault(); S.selMonth={y:Y,m:i}; render(); } }}));
+    if (m.sum > 0) {
+      const r = Math.min(4, bw/2, hgt);
+      g.append(s('path',{class:'bar' + (i===sel ? ' sel' : ''), 'pointer-events':'none',
+        d:`M${x},${T+ph} V${top+r} Q${x},${top} ${x+r},${top} H${x+bw-r} Q${x+bw},${top} ${x+bw},${top+r} V${T+ph} Z`}));
+    }
+    if (i === sel && m.sum > 0) g.append(s('text',{class:'vlab',x:cx,y:top-6,'text-anchor':'middle','pointer-events':'none',text:bahtShort(m.sum)}));
+    g.append(s('text',{class:'mlab' + (i===sel ? ' sel' : ''),x:cx,y:H-8,'text-anchor':'middle','pointer-events':'none',text:fShortM.format(new Date(Y,i,1))}));
+    svg.append(g);
+  });
+  wrapEl.append(svg, tip);
+  return wrapEl;
+}
+function jumpTo(t){
+  if (!t) return;
+  S.tab = kindOf(t); S.openEx.add(t.id); render();
+  const el = document.getElementById('trip-' + t.id); el && el.scrollIntoView({block:'start', behavior:'smooth'});
+}
+
+/* ---------- leave days / both free ---------- */
+const isMine = l => l.who === S.me || (l.who === 'owner' && S.isOwner) || (l.who === 'partner' && !S.isOwner && !!S.me);
+function leaveMaps(){
+  const me = {}, pt = {}, hol = {};
+  for (const l of S.leaves) { if (!l.date) continue; (isMine(l) ? me : pt)[l.date] = l; }
+  for (const x of S.holidays) if (x.date) hol[x.date] = x;
+  return {me, pt, hol};
+}
+function dayInfo(ds, M){
+  const d = parse(ds), we = d.getDay() === 0 || d.getDay() === 6, hol = M.hol[ds], wk = we || !!hol, m = M.me[ds], p = M.pt[ds];
+  const mFree = wk || !!m, pFree = wk || !!p;
+  return {wk, we, hol, m, p, both: mFree && pFree, leaveBoth: !wk && !!m && !!p};
+}
+function stretches(M){
+  const out = []; let cur = null; const t0 = today();
+  for (let i = 0; i < 400; i++) {
+    const d = addDays(t0, i), ds = iso(d), inf = dayInfo(ds, M);
+    if (inf.both) { if (!cur) cur = {start:ds, end:ds, n:0, leave:0, hol:0}; cur.end = ds; cur.n++; if (inf.leaveBoth) cur.leave++; if (inf.hol) cur.hol++; }
+    else if (cur) { out.push(cur); cur = null; }
+  }
+  if (cur) out.push(cur);
+  return out.filter(x => x.n >= 2 && (x.leave > 0 || x.hol > 0));
+}
+function cycleLeave(ds, M){
+  const cur = M.me[ds], order = ['AL','comp','off'];
+  if (!cur) return quiet(store.set('leaves', S.me + '_' + ds, {who:S.me, date:ds, type:'AL', note:'', createdBy:S.me, createdAt:Date.now()}));
+  const i = order.indexOf(cur.type);
+  if (i < order.length - 1) return quiet(store.update('leaves', cur.id, {type: order[i+1]}));
+  return quiet(store.remove('leaves', cur.id));
+}
+async function bulkAdd(b, M){
+  if (!b.from) { toast('เลือกวันเริ่มก่อน'); return; }
+  const to = b.to && b.to >= b.from ? b.to : b.from;
+  const days = [];
+  for (let d = parse(b.from); iso(d) <= to && days.length < 62; d = addDays(d,1)) {
+    if (b.skipWk && (d.getDay() === 0 || d.getDay() === 6)) continue;
+    days.push(iso(d));
+  }
+  let n = 0;
+  for (const ds of days) {
+    const ex = M.me[ds], data = {who: ex ? ex.who : S.me, date:ds, type:b.type, note:(b.note||'').trim().slice(0,80), createdBy:S.me, createdAt:Date.now()};
+    try { await store.set('leaves', ex ? ex.id : S.me + '_' + ds, data); n++; } catch { break; }
+  }
+  if (n) { toast('เพิ่มวัน' + LEAVE[b.type] + ' ' + n + ' วันแล้ว'); b.note = ''; render(); }
+}
+function rangeLabel(a, b){
+  const A = parse(a), B = parse(b);
+  return a === b ? fFull.format(A) : fDay.format(A) + ' – ' + fFull.format(B);
+}
+function renderFree(){
+  const el = $('#free'); el.replaceChildren();
+  const M = leaveMaps(), ro = S.readOnly || !S.me, ppl = people();
+  const partnerId = ppl.find(id => id !== S.me);
+  const ptName = partnerId ? shortName(partnerId) : 'แฟน';
+  const tIso = iso(today());
+
+  // calendar
+  const m = S.fcal, yy = m.getFullYear(), mo = m.getMonth();
+  const cal = h('div',{class:'panel'},
+    h('div',{class:'cal-h'},
+      h('button',{type:'button',class:'round','aria-label':'เดือนก่อน',onclick:()=>{S.fcal=new Date(yy,mo-1,1); render();}},'‹'),
+      h('h3',{text:fMonth.format(m)}),
+      h('button',{type:'button',class:'round','aria-label':'เดือนถัดไป',onclick:()=>{S.fcal=new Date(yy,mo+1,1); render();}},'›')));
+  const g = h('div',{class:'fcal'});
+  ['จ','อ','พ','พฤ','ศ','ส','อา'].forEach(w => g.append(h('div',{class:'wd',text:w})));
+  const lead = (m.getDay() + 6) % 7, days = new Date(yy, mo+1, 0).getDate();
+  for (let i=0;i<lead;i++) g.append(h('div',{class:'fc out','aria-hidden':'true'}));
+  for (let d=1; d<=days; d++) {
+    const ds = iso(new Date(yy,mo,d)), inf = dayInfo(ds, M);
+    const cls = 'fc' + (inf.leaveBoth ? ' both' : inf.wk ? ' wk' : '') + (ds < tIso ? ' past' : '') + (ds === tIso ? ' today' : '');
+    const lab = fFull.format(new Date(yy,mo,d)) + (inf.hol ? ' · ' + (inf.hol.name || 'วันหยุดราชการ') : '') + (inf.m ? ' · ฉัน ' + LEAVE[inf.m.type] : '') + (inf.p ? ' · ' + ptName + ' ' + LEAVE[inf.p.type] : '') + (inf.leaveBoth ? ' · ว่างตรงกัน' : '');
+    g.append(h('button',{type:'button',class:cls,'aria-label':lab,title:[inf.hol&&inf.hol.name, inf.m&&inf.m.note, inf.p&&inf.p.note].filter(Boolean).join(' / ')||null,disabled:ro,
+      onclick:()=>cycleLeave(ds, M)},
+      h('span',{text:d}),
+      h('div',{class:'tags'},
+        inf.hol ? h('span',{class:'tg hol',text:'หยุด'}) : null,
+        inf.m ? h('span',{class:'tg me',text:LEAVE_SHORT[inf.m.type]}) : null,
+        inf.p ? h('span',{class:'tg pt',text:ptName.slice(0,6) + ' ' + LEAVE_SHORT[inf.p.type]}) : null)));
+  }
+  cal.append(g, h('div',{class:'legend'},
+    h('span',{}, h('i',{class:'sw me'}),'วันลาของฉัน'), h('span',{}, h('i',{class:'sw pt'}),'วันลาของ' + ptName),
+    h('span',{}, h('i',{class:'sw both'}),'ลาตรงกัน'), h('span',{}, h('i',{class:'sw wk'}),'เสาร์-อาทิตย์'), h('span',{}, h('i',{class:'sw hol'}),'วันหยุดราชการ')),
+    ro ? null : h('p',{style:'margin:8px 0 0;font-size:13px;color:var(--muted)',text:'แตะวันเพื่อใส่วันลาของคุณ แตะซ้ำเพื่อเปลี่ยน: ลาพักร้อน → หยุดชดเชย → วันหยุด → ลบ'}));
+
+  // stretches
+  const st = stretches(M).slice(0, 8);
+  const sp = h('div',{class:'panel'}, h('h3',{class:'sm',text:'ช่วงที่ว่างตรงกัน 2 วันขึ้นไป'}));
+  if (!st.length) sp.append(h('p',{style:'margin:0;color:var(--muted);font-size:14px',
+    text: Object.keys(M.pt).length ? 'ยังไม่มีช่วงที่ลาตรงกัน ลองดูวันลาของอีกคนแล้วลาให้ตรงกัน' : 'ยังไม่มีวันลาของ' + ptName + ' ให้' + ptName + 'เปิดหน้านี้แล้วแตะวันลาในปฏิทิน หรือส่งตารางงานให้ Claude นำเข้า'}));
+  st.forEach(x => sp.append(h('div',{class:'stretch'},
+    h('div',{}, h('b',{text:rangeLabel(x.start, x.end)}), h('div',{class:'sub',text:x.n + ' วัน' + [x.hol ? 'วันหยุดราชการ ' + x.hol + ' วัน' : '', x.leave ? 'ลาตรงกัน ' + x.leave + ' วัน' : ''].filter(Boolean).map(s => ' · ' + s).join('')})),
+    S.readOnly ? null : h('button',{type:'button',class:'btn-ghost',onclick:()=>openForm(null, x.start, 'dated', x.end)},'วางแผนทริปช่วงนี้'))));
+
+  // bulk add
+  let bulk = null;
+  if (!ro) {
+    const b = S.bulk || (S.bulk = {from:'', to:'', type:'AL', note:'', skipWk:true});
+    const bind = f => e => { b[f] = e.target.type === 'checkbox' ? e.target.checked : e.target.value; };
+    bulk = h('form',{class:'panel',onsubmit:e=>{e.preventDefault(); bulkAdd(b, M);}},
+      h('h3',{class:'sm',text:'ใส่วันลาทีละหลายวัน'}),
+      h('div',{class:'bulk'},
+        h('div',{class:'field'}, h('label',{for:'bk-from',text:'ตั้งแต่'}), h('input',{id:'bk-from',type:'date',value:b.from,onchange:bind('from')})),
+        h('div',{class:'field'}, h('label',{for:'bk-to',text:'ถึง'}), h('input',{id:'bk-to',type:'date',value:b.to,onchange:bind('to')})),
+        h('div',{class:'field'}, h('label',{for:'bk-type',text:'ประเภท'}), h('select',{id:'bk-type',onchange:bind('type')}, Object.entries(LEAVE).map(([k,v]) => h('option',{value:k,selected:k===b.type},v)))),
+        h('div',{class:'field'}, h('label',{for:'bk-note',text:'หมายเหตุ'}), h('input',{id:'bk-note',maxlength:'80',placeholder:'เช่น ชดเชย 7 มิ.ย.',value:b.note,oninput:bind('note')})),
+        h('label',{class:'chk'}, h('input',{type:'checkbox',id:'bk-wk',checked:b.skipWk,onchange:bind('skipWk')}), 'ข้ามเสาร์-อาทิตย์'),
+        h('div',{style:'grid-column:1/-1;display:flex;justify-content:flex-end'}, h('button',{type:'submit',class:'btn'},'เพิ่มวันลา'))));
+  }
+
+  // upcoming leave lists
+  const upcoming = (map, who) => Object.values(map).filter(l => l.date >= tIso).sort((a,b) => a.date.localeCompare(b.date)).slice(0, 20).map(l => {
+    const inf = dayInfo(l.date, M);
+    return h('div',{class:'lvrow'},
+      h('span',{class:'tg ' + (who === 'me' ? 'me' : 'pt'),style:'font-size:12px;padding:1px 6px',text:LEAVE[l.type] || l.type}),
+      h('div',{}, h('div',{text:fFull.format(parse(l.date))}), l.note ? h('div',{class:'sub',text:l.note}) : null),
+      inf.leaveBoth || inf.wk ? h('span',{class:'badge ok',text:'ว่างตรงกัน'}) : h('span',{class:'badge wait',text:(who === 'me' ? ptName : 'ฉัน') + 'ยังไม่ลา'}),
+      (who === 'me' && !ro) ? h('button',{type:'button',class:'x','aria-label':'ลบวันลา',onclick:()=>quiet(store.remove('leaves', l.id))},'×') : h('span'));
+  });
+  const mineL = upcoming(M.me, 'me'), ptL = upcoming(M.pt, 'pt');
+  const lists = h('div',{class:'split'},
+    h('div',{class:'panel'}, h('h3',{class:'sm',text:'วันลาของฉันที่จะถึง'}), mineL.length ? mineL : h('p',{style:'margin:0;color:var(--muted);font-size:14px',text:'ยังไม่มี'})),
+    h('div',{class:'panel'}, h('h3',{class:'sm',text:'วันลาของ' + ptName + 'ที่จะถึง'}), ptL.length ? ptL : h('p',{style:'margin:0;color:var(--muted);font-size:14px',text:'ยังไม่มี'})));
+
+  el.append(...[sp, cal, bulk, lists].filter(Boolean));
+}
+
+/* ---------- aside ---------- */
+function renderCal(){
+  const el = $('#calPanel'); el.replaceChildren();
+  const m = S.cal, yy = m.getFullYear(), mo = m.getMonth();
+  el.append(h('div',{class:'cal-h'},
+    h('button',{type:'button',class:'round','aria-label':'เดือนก่อน',onclick:()=>{S.cal=new Date(yy,mo-1,1); render();}},'‹'),
+    h('h3',{text:fMonth.format(m)}),
+    h('button',{type:'button',class:'round','aria-label':'เดือนถัดไป',onclick:()=>{S.cal=new Date(yy,mo+1,1); render();}},'›')));
+  const g = h('div',{class:'cal'});
+  ['จ','อ','พ','พฤ','ศ','ส','อา'].forEach(w => g.append(h('div',{class:'wd',text:w})));
+  const lead = (m.getDay() + 6) % 7, days = new Date(yy, mo+1, 0).getDate(), tIso = iso(today());
+  for (let i=0;i<lead;i++) g.append(h('div',{class:'c out','aria-hidden':'true'}));
+  for (let d=1; d<=days; d++) {
+    const ds = iso(new Date(yy,mo,d));
+    const hits = S.trips.filter(t => t.start && !t.wish && t.start <= ds && (t.end||t.start) >= ds);
+    const label = fFull.format(new Date(yy,mo,d)) + (hits.length ? ': ' + hits.map(t=>t.title).join(', ') : '');
+    g.append(h('button',{type:'button',class:'c'+(ds===tIso?' today':''),'aria-label':label,title:hits.map(t=>t.title).join(', ')||null,
+      onclick:()=>{ if (hits.length) jumpTo(hits[0]); else if (!S.readOnly) openForm(null, ds); }},
+      h('span',{text:d}), h('div',{class:'bars'}, hits.slice(0,2).map(t => h('div',{class:'cb '+kindOf(t)})))));
+  }
+  el.append(g, h('div',{class:'legend'},
+    h('span',{}, h('i',{class:'dot past'}),'ไปมาแล้ว'), h('span',{}, h('i',{class:'dot upcoming'}),'กำลังจะไป'),
+    S.readOnly ? null : h('span',{},'แตะวันว่างเพื่อเพิ่มทริป')));
+}
+function renderMStat(){
+  const el = $('#mstat'); el.replaceChildren();
+  const t = today(), key = t.getFullYear() + '-' + pad(t.getMonth()+1);
+  const sum = p => S.expenses.filter(e => expDate(e).startsWith(p)).reduce((a,e) => a + (Number(e.amount)||0), 0);
+  const prevD = new Date(t.getFullYear(), t.getMonth()-1, 1);
+  el.append(h('span',{class:'l',text:'เดือนนี้ใช้ไปกับการเที่ยว'}), h('span',{class:'v',text:baht(sum(key))}),
+    h('div',{class:'row'}, h('span',{text:'เดือนที่แล้ว'}), h('b',{text:baht(sum(prevD.getFullYear() + '-' + pad(prevD.getMonth()+1)))})),
+    h('div',{class:'row'}, h('span',{text:'ทั้งปี ' + beYear(t.getFullYear())}), h('b',{text:baht(sum(t.getFullYear() + '-'))})),
+    S.tab === 'spend' ? null : h('button',{type:'button',class:'link',style:'align-self:flex-start;margin-top:4px',onclick:()=>{S.tab='spend'; S.year=t.getFullYear(); S.selMonth=null; render(); window.scrollTo({top:0});}},'ดูสรุปค่าใช้จ่าย'));
+}
+
+/* ---------- form ---------- */
+const form = $('#tripForm');
+function setMode(mode){
+  $('#f-mode-' + mode).checked = true;
+  form.querySelectorAll('.field.dated').forEach(f => { f.hidden = mode === 'wish'; });
+}
+form.querySelectorAll('input[name=fmode]').forEach(r => r.addEventListener('change', () => setMode(r.value)));
+function openForm(t, startIso, forceMode, endIso){
+  S.editing = t ? t.id : null;
+  $('#formTitle').textContent = t ? (forceMode === 'dated' ? 'ตั้งวันไป' : 'แก้ไขทริป') : 'เพิ่มทริป';
+  $('#f-title').value = t ? t.title||'' : '';
+  $('#f-start').value = t && t.start ? t.start : (startIso || '');
+  $('#f-end').value = t && t.end ? t.end : (endIso || startIso || '');
+  $('#f-kind').value = t && t.kind ? t.kind : 'ทะเล';
+  $('#f-note').value = t ? t.note||'' : '';
+  $('#formErr').textContent = '';
+  setMode(forceMode || (t ? (kindOf(t) === 'wish' ? 'wish' : 'dated') : (S.tab === 'wish' && !startIso ? 'wish' : 'dated')));
+  form.hidden = false; form.scrollIntoView({block:'nearest'});
+  (forceMode === 'dated' ? $('#f-start') : $('#f-title')).focus();
+}
+function closeForm(){ form.hidden = true; S.editing = null; }
+$('#addBtn').addEventListener('click', () => openForm(null));
+$('#cancelBtn').addEventListener('click', closeForm);
+$('#f-start').addEventListener('change', () => { const e = $('#f-end'); if (!e.value || e.value < $('#f-start').value) e.value = $('#f-start').value; });
+form.addEventListener('submit', e => {
+  e.preventDefault();
+  const wish = $('#f-mode-wish').checked;
+  const title = $('#f-title').value.trim(), start = $('#f-start').value; const end = $('#f-end').value || start;
+  const err = $('#formErr');
+  if (!title) { err.textContent = 'ใส่ชื่อที่เที่ยวก่อน'; $('#f-title').focus(); return; }
+  if (!wish && !start) { err.textContent = 'เลือกวันไปก่อน หรือเลือก “อยากไป ยังไม่มีวัน”'; $('#f-start').focus(); return; }
+  if (!wish && end < start) { err.textContent = 'วันกลับต้องไม่ก่อนวันไป'; $('#f-end').focus(); return; }
+  const data = { title: title.slice(0,80), start: wish ? null : start, end: wish ? null : end, wish, kind: $('#f-kind').value, note: $('#f-note').value.trim().slice(0,2000) };
+  if (S.editing) quiet(store.update('trips', S.editing, data).then(() => toast('บันทึกแล้ว')));
+  else quiet(store.add('trips', { ...data, rating:0, checklist:[], createdBy:S.me, createdAt:Date.now() }).then(() => toast('เพิ่มทริปแล้ว')));
+  const k = kindOf(data);
+  S.tab = k;
+  if (!wish) S.cal = new Date(parse(start).getFullYear(), parse(start).getMonth(), 1);
+  closeForm(); render();
+});
+
+let toastT;
+function toast(msg, actLabel, act){
+  const t = $('#toast'); t.replaceChildren(h('span',{text:msg}));
+  if (actLabel) t.append(h('button',{type:'button',onclick:()=>{ t.hidden = true; act(); }}, actLabel));
+  t.hidden = false; clearTimeout(toastT); toastT = setTimeout(() => { t.hidden = true; }, actLabel ? 6000 : 2600);
+}
+
+window.tripRerender = () => render();
+init();
+})();
+</script>
+
+</body></html>
