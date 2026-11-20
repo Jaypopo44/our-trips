@@ -1,4 +1,4 @@
-<!doctype html><html lang="th"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover"><meta name="apple-mobile-web-app-capable" content="yes"><meta name="mobile-web-app-capable" content="yes"><meta name="apple-mobile-web-app-title" content="ทริปของเรา"><meta name="apple-mobile-web-app-status-bar-style" content="default"><meta name="theme-color" content="#1c2a55"><meta name="robots" content="noindex"><style>:root{color-scheme:light;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}body{margin:0;-webkit-text-size-adjust:100%}img{max-width:100%}[hidden]{display:none!important}</style><script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.100.0/dist/umd/supabase.js"></script><script>
+<!doctype html><html lang="th"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover"><meta name="apple-mobile-web-app-capable" content="yes"><meta name="mobile-web-app-capable" content="yes"><meta name="apple-mobile-web-app-title" content="J&amp;N Trips"><meta name="application-name" content="J&amp;N Trips"><link rel="apple-touch-icon" href="apple-touch-icon.png"><link rel="icon" type="image/png" sizes="192x192" href="icon-192.png"><meta name="apple-mobile-web-app-status-bar-style" content="default"><meta name="theme-color" content="#1c2a55"><meta name="robots" content="noindex"><style>:root{color-scheme:light;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}body{margin:0;-webkit-text-size-adjust:100%}img{max-width:100%}[hidden]{display:none!important}</style><script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.100.0/dist/umd/supabase.js"></script><script>
 /* Supabase adapter: gives the page the same claude.use('db'|'user'|'assets') API it had as a Claude artifact.
    Access = secret key in the share link (#k=...). Data goes through security-definer RPCs that check the key. */
 (() => {
@@ -33,7 +33,7 @@
     el.replaceChildren();
     const card = document.createElement('div');
     card.style.cssText = 'background:var(--card,#fff);border-radius:20px;padding:28px 24px;max-width:380px;width:100%;box-shadow:var(--shadow,0 8px 24px rgba(0,0,0,.08));display:flex;flex-direction:column;gap:14px;text-align:center';
-    const h = document.createElement('h2'); h.textContent = 'ทริปของเรา';
+    const h = document.createElement('h2'); h.textContent = 'J&N Trips';
     h.style.cssText = 'margin:0;font:700 26px var(--f-display,system-ui)';
     card.append(h); build(card); el.append(card);
   }
@@ -179,7 +179,7 @@
 })();
 
 </script></head><body>
-<title>ทริปของเรา</title>
+<title>J&amp;N Trips</title>
 <meta name="claude:viewport-fit-sides" content="cover">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -449,6 +449,24 @@ h3.sm{font-size:15px;margin-bottom:10px}
   .stub .d{font-size:32px}
   .tbody{padding:12px}
 }
+/* shopping */
+.shadd{display:flex;gap:6px}
+.shadd input{flex:1;min-width:0;border:1px solid var(--line);background:var(--paper);border-radius:999px;padding:7px 14px}
+.shlist{display:flex;flex-direction:column}
+.shrow{display:grid;grid-template-columns:minmax(0,1fr) auto auto;gap:6px 10px;align-items:center;padding:8px 0;border-bottom:1px dashed var(--line);font-size:15px}
+.shrow:last-child{border-bottom:0}
+.shrow .nm{overflow-wrap:anywhere}
+.shrow .sub{font-size:12px;color:var(--muted)}
+.buyform{grid-column:1/-1;display:grid;grid-template-columns:repeat(auto-fit,minmax(118px,1fr));gap:6px;background:var(--mint-soft);border-radius:10px;padding:8px}
+.buyform input,.buyform select{border:1px solid var(--line);background:var(--card);border-radius:8px;padding:6px 8px;font-size:14px;width:100%;min-width:0}
+.buyform .btn{justify-content:center}
+.btn-ghost.ok{color:var(--mint);border-color:var(--mint)}
+.vtoggle{display:flex;gap:4px;background:var(--card);padding:4px;border-radius:999px;box-shadow:var(--shadow)}
+.vtoggle button{border:0;background:transparent;padding:5px 12px;border-radius:999px;cursor:pointer;color:var(--muted);font-size:13px}
+.vtoggle button[aria-pressed="true"]{background:var(--ink);color:var(--card)}
+.chart .bar.shp{fill:var(--sky);opacity:.45}
+.chart .bar.shp.sel{opacity:1}
+.sw.tr{background:var(--accent)}.sw.sh{background:var(--sky)}
 @media (prefers-reduced-motion:no-preference){.ticket{transition:transform .15s}.ticket:hover{transform:translateY(-1px)}}
 </style>
 
@@ -479,6 +497,7 @@ h3.sm{font-size:15px;margin-bottom:10px}
       <div id="list" class="col"></div>
       <div id="spend" class="col" hidden></div>
       <div id="free" class="col" hidden></div>
+      <div id="shop" class="col" hidden></div>
     </div>
     <aside class="aside">
       <div class="panel" id="calPanel"></div>
@@ -536,7 +555,8 @@ const uid = () => Date.now().toString(36) + Math.random().toString(36).slice(2,6
 
 const LEAVE = {AL:'ลาพักร้อน', comp:'หยุดชดเชย', off:'วันหยุด'};
 const LEAVE_SHORT = {AL:'ลา', comp:'ชดเชย', off:'หยุด'};
-const S = { trips:[], expenses:[], photos:[], leaves:[], holidays:[], isOwner:false, fcal:null, bulk:null, members:{}, me:null, profiles:{}, tab:'past', cal:null, editing:null,
+const SHOP_CATS = ['ของใช้ในบ้าน','ของกิน','เสื้อผ้า','ของใช้ส่วนตัว','เครื่องใช้ไฟฟ้า','ของขวัญ','อื่นๆ'];
+const S = { trips:[], expenses:[], photos:[], leaves:[], holidays:[], shopping:[], shopMonth:null, shopBuy:null, spendView:'all', isOwner:false, fcal:null, bulk:null, members:{}, me:null, profiles:{}, tab:'past', cal:null, editing:null,
   openCk:new Set(), openEx:new Set(), confirmDel:null, readOnly:false, mode:'loading', drafts:{},
   year:today().getFullYear(), selMonth:null, uploading:{}, lightbox:null, lbConfirm:false, byTrip:{} };
 { const t = today(); S.cal = new Date(t.getFullYear(), t.getMonth(), 1); S.fcal = new Date(t.getFullYear(), t.getMonth(), 1); }
@@ -546,7 +566,7 @@ let db = null, user = null, assets = null;
 const LKEY = 'our-trips-journal';
 const local = {
   load(){ try { return JSON.parse(localStorage.getItem(LKEY) || '{}') || {}; } catch { return {}; } },
-  save(){ try { localStorage.setItem(LKEY, JSON.stringify({trips:S.trips, expenses:S.expenses, photos:S.photos, leaves:S.leaves})); } catch {} }
+  save(){ try { localStorage.setItem(LKEY, JSON.stringify({trips:S.trips, expenses:S.expenses, photos:S.photos, leaves:S.leaves, shopping:S.shopping})); } catch {} }
 };
 const chains = {};
 function queue(key, fn){
@@ -592,7 +612,7 @@ async function init(){
   if (!db) {
     const L = local.load();
     S.mode = 'local'; S.me = 'local-me'; S.members = {'local-me':1};
-    S.trips = L.trips || []; S.expenses = L.expenses || []; S.photos = L.photos || []; S.leaves = L.leaves || []; S.holidays = L.holidays || []; S.isOwner = true;
+    S.trips = L.trips || []; S.expenses = L.expenses || []; S.photos = L.photos || []; S.leaves = L.leaves || []; S.holidays = L.holidays || []; S.shopping = L.shopping || []; S.isOwner = true;
     render(); return;
   }
   S.me = user ? await user.id() : null;
@@ -617,6 +637,7 @@ async function init(){
   db.collection('photos').onSnapshot(snap => { S.photos = snap.docs.map(d => ({id:d.id, ...d.data()})); render(); }, () => {});
   db.collection('leaves').onSnapshot(snap => { S.leaves = snap.docs.map(d => ({id:d.id, ...d.data()})); render(); }, () => {});
   db.collection('holidays').onSnapshot(snap => { S.holidays = snap.docs.map(d => ({id:d.id, ...d.data()})); render(); }, () => {});
+  db.collection('shopping').onSnapshot(snap => { S.shopping = snap.docs.map(d => ({id:d.id, ...d.data()})); render(); }, () => {});
   db.doc('meta/members').onSnapshot(x => { S.members = x.exists ? {...(x.data().ids || {})} : {}; render(); refreshProfiles(); }, () => {});
 }
 
@@ -674,11 +695,11 @@ function render(){
   S.byTrip = {};
   for (const e of S.expenses) (S.byTrip[e.tripId] = S.byTrip[e.tripId] || []).push(e);
   renderHero(); renderBanner(); renderTabs();
-  const spend = S.tab === 'spend', free = S.tab === 'free';
-  $('#list').hidden = spend || free; $('#spend').hidden = !spend; $('#free').hidden = !free;
-  if (spend) renderSpend(); else if (free) renderFree(); else renderList();
+  const spend = S.tab === 'spend', free = S.tab === 'free', shop = S.tab === 'shop';
+  $('#list').hidden = spend || free || shop; $('#spend').hidden = !spend; $('#free').hidden = !free; $('#shop').hidden = !shop;
+  if (spend) renderSpend(); else if (free) renderFree(); else if (shop) renderShop(); else renderList();
   renderCal(); renderMStat(); renderLightbox();
-  $('#addBtn').hidden = S.readOnly;
+  $('#addBtn').hidden = S.readOnly || shop;
   if (aid) { const el = document.getElementById(aid); if (el && el !== document.activeElement) { el.focus(); try { if (sel != null) el.setSelectionRange(sel, sel); } catch {} } }
 }
 
@@ -687,7 +708,7 @@ function renderHero(){
   const left = h('div', {}), t0 = today();
   const next = S.trips.filter(t => kindOf(t) === 'upcoming').sort((a,b) => a.start.localeCompare(b.start))[0];
   if (S.mode === 'loading') {
-    left.append(h('div',{class:'eyebrow',text:'ทริปของเรา'}), h('div',{class:'dest',text:'กำลังโหลด…'}));
+    left.append(h('div',{class:'eyebrow',text:'J&N Trips'}), h('div',{class:'dest',text:'กำลังโหลด…'}));
   } else if (next) {
     const d = dayDiff(t0, parse(next.start));
     left.append(h('div',{class:'eyebrow',text: d <= 0 ? 'ตอนนี้' : 'ทริปถัดไป'}));
@@ -721,9 +742,10 @@ function renderBanner(){
 function renderTabs(){
   const el = $('#tabs'); el.replaceChildren();
   const cnt = k => S.trips.filter(t => kindOf(t) === k).length;
-  for (const [k,label] of [['past','บันทึกการเที่ยว'],['upcoming','กำลังจะไป'],['wish','อยากไป'],['free','วันว่างตรงกัน'],['spend','ค่าใช้จ่าย']])
+  const todoN = S.shopping.filter(x => x.status !== 'bought').length;
+  for (const [k,label] of [['past','บันทึกการเที่ยว'],['upcoming','กำลังจะไป'],['wish','อยากไป'],['free','วันว่างตรงกัน'],['shop','ซื้อของ'],['spend','ค่าใช้จ่าย']])
     el.append(h('button',{type:'button','aria-pressed':String(S.tab===k), onclick:()=>{S.tab=k; S.confirmDel=null; render();}},
-      label, (k === 'spend' || k === 'free') ? null : h('span',{class:'n',text:cnt(k)})));
+      label, (k === 'spend' || k === 'free') ? null : k === 'shop' ? (todoN ? h('span',{class:'n',text:todoN}) : null) : h('span',{class:'n',text:cnt(k)})));
 }
 
 function renderList(){
@@ -806,7 +828,7 @@ function reminders(t){
   const a = parse(t.start), b = parse(t.end || t.start), d = dayDiff(today(), a);
   const gcal = 'https://calendar.google.com/calendar/render?' + new URLSearchParams({
     action:'TEMPLATE', text:'เที่ยว ' + t.title, dates: ymd(a) + '/' + ymd(addDays(b,1)),
-    details: (t.note ? t.note + '\n\n' : '') + 'จากแอป ทริปของเรา'}).toString();
+    details: (t.note ? t.note + '\n\n' : '') + 'จากแอป J&N Trips'}).toString();
   const msg = 'นัดเที่ยว ' + t.title + '\n' + rangeText(t) + ' (' + lengthText(t) + ')' + (d > 0 ? '\nอีก ' + d + ' วัน' : '');
   return h('div',{class:'sec'},
     h('div',{class:'remind'},
@@ -993,55 +1015,199 @@ async function deleteTrip(t){
   toast('ลบทริปแล้ว'); render();
 }
 
+/* ---------- shopping ---------- */
+const shopBought = () => S.shopping.filter(x => x.status === 'bought' && x.date);
+const tripOn = ds => S.trips.find(t => t.start && !t.wish && t.start <= ds && (t.end||t.start) >= ds);
+function tripChoices(){ return S.trips.filter(t => t.start && !t.wish).sort((a,b) => b.start.localeCompare(a.start)).slice(0, 30); }
+const realName = id => id === 'split' ? 'ซื้อด้วยกัน' : ((S.profiles[id] && S.profiles[id].name) || shortName(id));
+function payerOpts(){
+  const ids = people().slice(0,2);
+  if (ids.length < 2) ids.push(ids[0] === 'partner' ? 'owner' : 'partner');
+  return [...ids.map(x => [x, realName(x) + ' ซื้อ']), ['split','ซื้อด้วยกัน (หาร)']];
+}
+function newBuyDraft(){ const ds = iso(today()), t = tripOn(ds); return {name:'', amount:'', cat:SHOP_CATS[0], paidBy:S.me || 'split', date:ds, trip:t ? t.id : '', tripTouched:false}; }
+function buyFields(d, pfx){
+  const bind = (f, rr) => e => {
+    d[f] = e.target.value;
+    if (f === 'date' && !d.tripTouched) { const t = tripOn(d.date); d.trip = t ? t.id : ''; }
+    if (f === 'trip') d.tripTouched = true;
+    if (rr) render();
+  };
+  return [
+    h('input',{id:pfx+'-amt',type:'number',min:'0',step:'any',inputmode:'decimal',placeholder:'ราคา (บาท)',value:d.amount,oninput:bind('amount'),'aria-label':'ราคา (บาท)'}),
+    h('select',{id:pfx+'-trip',onchange:bind('trip',true),'aria-label':'ซื้อตอนไปเที่ยวไหม'},
+      h('option',{value:'',selected:!d.trip},'ไม่เกี่ยวกับทริป'),
+      tripChoices().map(t => h('option',{value:t.id,selected:t.id===d.trip},'ทริป ' + t.title))),
+    d.trip ? null : h('select',{id:pfx+'-cat',onchange:bind('cat'),'aria-label':'หมวด'}, SHOP_CATS.map(c => h('option',{value:c,selected:c===d.cat},c))),
+    h('select',{id:pfx+'-pay',onchange:bind('paidBy'),'aria-label':'ใครซื้อ'}, payerOpts().map(([v,l]) => h('option',{value:v,selected:v===d.paidBy},l))),
+    h('input',{id:pfx+'-date',type:'date',value:d.date,onchange:bind('date',true),'aria-label':'วันที่ซื้อ'})
+  ];
+}
+function recordPurchase(d, item){
+  const name = (item ? item.name : (d.name||'').trim()).slice(0,80);
+  if (!name) { toast('ใส่ชื่อของก่อน'); return false; }
+  const amount = Math.round(parseFloat(d.amount) * 100) / 100;
+  if (!(amount > 0)) { toast('ใส่ราคาก่อน'); return false; }
+  const date = d.date || iso(today());
+  if (d.trip) {
+    const t = S.trips.find(x => x.id === d.trip);
+    quiet(store.add('expenses', {tripId:d.trip, label:name, amount, cat:'ช้อปปิ้ง', paidBy:d.paidBy, date, createdBy:S.me, createdAt:Date.now()}));
+    if (item) quiet(store.remove('shopping', item.id));
+    toast('รวมเป็นค่าเที่ยวของทริป ' + (t ? t.title : '') + ' แล้ว');
+  } else {
+    const data = {name, status:'bought', cat:d.cat || 'อื่นๆ', amount, paidBy:d.paidBy, date, boughtAt:Date.now()};
+    if (item) quiet(store.update('shopping', item.id, data));
+    else quiet(store.add('shopping', {...data, createdBy:S.me, createdAt:Date.now()}));
+    toast('บันทึก “' + name + '” แล้ว');
+  }
+  return true;
+}
+function removeShop(it){
+  const {id, ...rest} = it;
+  quiet(store.remove('shopping', id));
+  toast('ลบ “' + (it.name||'รายการ') + '” แล้ว', 'เลิกทำ', () => quiet(store.add('shopping', rest)));
+}
+function renderShop(){
+  const el = $('#shop'); el.replaceChildren();
+  if (S.mode === 'loading') { el.append(h('div',{class:'panel empty'}, h('p',{text:'กำลังโหลด…'}))); return; }
+  const ro = S.readOnly, dr = S.drafts;
+  const muted = t => h('p',{style:'margin:0;color:var(--muted);font-size:14px',text:t});
+
+  // to-buy list
+  const todo = S.shopping.filter(x => x.status !== 'bought').sort((a,b) => (a.createdAt||0) - (b.createdAt||0));
+  const tp = h('div',{class:'panel col',style:'gap:10px'}, h('h3',{class:'sm',style:'margin:0',text:'ต้องซื้อ' + (todo.length ? ' · ' + todo.length + ' อย่าง' : '')}));
+  if (!ro) tp.append(h('form',{class:'shadd',onsubmit:e=>{e.preventDefault(); const v = (dr.shNew||'').trim(); if (!v) return; dr.shNew = '';
+      quiet(store.add('shopping', {name:v.slice(0,80), status:'todo', createdBy:S.me, createdAt:Date.now()})); render();}},
+    h('input',{id:'sh-new',value:dr.shNew||'',maxlength:'80',placeholder:'จดของที่ต้องซื้อ เช่น น้ำยาล้างจาน','aria-label':'ของที่ต้องซื้อ',oninput:e=>{dr.shNew = e.target.value;}}),
+    h('button',{type:'submit',class:'btn-ghost'},'เพิ่ม')));
+  if (!todo.length) tp.append(muted('ยังไม่มีของที่ต้องซื้อ'));
+  else tp.append(h('div',{class:'shlist'}, todo.map(it => {
+    const open = S.shopBuy === it.id, k = 'buy-' + it.id;
+    const row = h('div',{class:'shrow'},
+      h('div',{}, h('div',{class:'nm',text:it.name}), it.createdBy ? h('div',{class:'sub',text:'จดโดย ' + shortName(it.createdBy)}) : null),
+      ro ? h('span') : h('button',{type:'button',class:'btn-ghost ok',onclick:()=>{
+        if (open) S.shopBuy = null; else { S.shopBuy = it.id; dr[k] = newBuyDraft(); }
+        render(); if (!open) { const a = document.getElementById('bf-' + it.id + '-amt'); a && a.focus(); } }}, open ? 'ยกเลิก' : '✓ ซื้อแล้ว'),
+      ro ? h('span') : h('button',{type:'button',class:'x','aria-label':'ลบ ' + it.name,onclick:()=>removeShop(it)},'×'));
+    if (open && !ro) {
+      const d = dr[k] || (dr[k] = newBuyDraft());
+      row.append(h('form',{class:'buyform',onsubmit:e=>{e.preventDefault(); if (recordPurchase(d, it)) { S.shopBuy = null; delete dr[k]; render(); }}},
+        buyFields(d, 'bf-' + it.id), h('button',{type:'submit',class:'btn'},'บันทึก')));
+    }
+    return row;
+  })));
+
+  // record a purchase directly
+  let addP = null;
+  if (!ro) {
+    const d = dr.shAdd || (dr.shAdd = newBuyDraft());
+    addP = h('form',{class:'panel col',style:'gap:10px',onsubmit:e=>{e.preventDefault(); if (recordPurchase(d, null)) { dr.shAdd = newBuyDraft(); render(); }}},
+      h('h3',{class:'sm',style:'margin:0',text:'จดของที่ซื้อแล้ว'}),
+      h('div',{class:'buyform'},
+        h('input',{id:'sa-name',maxlength:'80',placeholder:'ซื้ออะไร',value:d.name,oninput:e=>{d.name = e.target.value;},'aria-label':'ซื้ออะไร',style:'grid-column:1/-1'}),
+        buyFields(d, 'sa'), h('button',{type:'submit',class:'btn'},'บันทึก')),
+      muted('ซื้อตอนไปเที่ยว ให้เลือกทริป จะรวมเป็นค่าเที่ยวของทริปนั้น (วันที่ตรงกับทริปไหน จะเลือกให้เอง) ไม่เกี่ยวกับทริป จะแยกเป็น “ซื้อของทั่วไป”'));
+  }
+
+  // monthly log of general purchases
+  const sm = S.shopMonth || (S.shopMonth = new Date(today().getFullYear(), today().getMonth(), 1));
+  const key = sm.getFullYear() + '-' + pad(sm.getMonth()+1);
+  const items = shopBought().filter(x => x.date.startsWith(key)).sort((a,b) => b.date.localeCompare(a.date) || (b.boughtAt||0) - (a.boughtAt||0));
+  const tot = items.reduce((a,x) => a + (Number(x.amount)||0), 0);
+  const tripShop = S.expenses.filter(e => e.cat === 'ช้อปปิ้ง' && expDate(e).startsWith(key)).reduce((a,e) => a + (Number(e.amount)||0), 0);
+  const lp = h('div',{class:'panel col',style:'gap:10px'},
+    h('div',{class:'cal-h',style:'margin:0'},
+      h('button',{type:'button',class:'round','aria-label':'เดือนก่อน',onclick:()=>{S.shopMonth = new Date(sm.getFullYear(), sm.getMonth()-1, 1); render();}},'‹'),
+      h('h3',{text:'ซื้อของทั่วไป · ' + fMonth.format(sm)}),
+      h('button',{type:'button',class:'round','aria-label':'เดือนถัดไป',onclick:()=>{S.shopMonth = new Date(sm.getFullYear(), sm.getMonth()+1, 1); render();}},'›')),
+    h('div',{class:'sec-t'}, h('span',{class:'payers',text:items.length ? items.length + ' รายการ' : 'ยังไม่มีรายการเดือนนี้'}), h('b',{text:baht(tot)})));
+  if (items.length) lp.append(h('div',{class:'exlist'}, items.map(x => h('div',{class:'exrow'},
+    h('span',{class:'cat',text:x.cat||'อื่นๆ'}),
+    h('span',{class:'lbl',text:x.name}),
+    h('span',{class:'who',text:realName(x.paidBy||'split') + ' · ' + fDay.format(parse(x.date))}),
+    h('span',{class:'amt',text:baht(x.amount)}),
+    ro ? h('span') : h('button',{type:'button',class:'x','aria-label':'ลบ ' + x.name,onclick:()=>removeShop(x)},'×')))));
+  if (items.length) {
+    const by = {}; items.forEach(x => { const p = x.paidBy || 'split'; by[p] = (by[p]||0) + (Number(x.amount)||0); });
+    lp.append(h('div',{class:'payers'}, Object.entries(by).map(([p,a]) => h('span',{}, realName(p) + (p === 'split' ? ' ' : ' ซื้อ '), h('b',{text:baht(a)})))));
+  }
+  if (tripShop) lp.append(muted('ซื้อของตอนเที่ยวเดือนนี้ ' + baht(tripShop) + ' (นับรวมในค่าเที่ยวแล้ว)'));
+  lp.append(h('button',{type:'button',class:'link',style:'align-self:flex-start',onclick:()=>{S.tab='spend'; S.spendView='all'; S.year=sm.getFullYear(); S.selMonth={y:sm.getFullYear(), m:sm.getMonth()}; render(); window.scrollTo({top:0});}},'ดูสรุปค่าใช้จ่ายรวม'));
+
+  el.append(...[tp, addP, lp].filter(Boolean));
+}
+
 /* ---------- spending ---------- */
 function renderSpend(){
   const el = $('#spend'); el.replaceChildren();
+  const V = S.spendView || 'all';
   const Y = S.year, now = today(), curY = now.getFullYear();
-  const yearEx = S.expenses.filter(e => expDate(e).startsWith(Y + '-'));
-  const months = Array.from({length:12}, () => ({sum:0, trips:{}, cats:{}}));
+  const inY = ds => ds.startsWith(Y + '-');
+  const yearEx = V === 'shop' ? [] : S.expenses.filter(e => inY(expDate(e)));
+  const yearSh = V === 'trip' ? [] : shopBought().filter(x => inY(x.date));
+  const months = Array.from({length:12}, () => ({sum:0, trip:0, shop:0, trips:{}, cats:{}, items:[]}));
   yearEx.forEach(e => {
-    const m = parseInt(expDate(e).slice(5,7), 10) - 1, a = Number(e.amount) || 0, M = months[m];
-    M.sum += a; M.trips[e.tripId] = (M.trips[e.tripId]||0) + a; M.cats[e.cat||'อื่นๆ'] = (M.cats[e.cat||'อื่นๆ']||0) + a;
+    const M = months[parseInt(expDate(e).slice(5,7), 10) - 1], a = Number(e.amount) || 0, c = e.cat || 'อื่นๆ';
+    M.sum += a; M.trip += a; M.trips[e.tripId] = (M.trips[e.tripId]||0) + a; M.cats[c] = (M.cats[c]||0) + a;
+  });
+  yearSh.forEach(x => {
+    const M = months[parseInt(x.date.slice(5,7), 10) - 1], a = Number(x.amount) || 0, c = V === 'shop' ? (x.cat || 'อื่นๆ') : 'ซื้อของทั่วไป';
+    M.sum += a; M.shop += a; M.items.push(x); M.cats[c] = (M.cats[c]||0) + a;
   });
   const total = months.reduce((a,m) => a + m.sum, 0);
+  const tTrip = months.reduce((a,m) => a + m.trip, 0), tShop = months.reduce((a,m) => a + m.shop, 0);
   const tripIds = new Set(yearEx.map(e => e.tripId));
   if (S.selMonth == null || S.selMonth.y !== Y) {
     let m = Y === curY ? now.getMonth() : months.reduce((bi,mm,i,arr) => mm.sum > arr[bi].sum ? i : bi, 0);
     S.selMonth = {y:Y, m};
   }
   const sel = S.selMonth.m;
-  const years = S.expenses.map(e => +expDate(e).slice(0,4)).filter(Boolean);
+  const years = [...S.expenses.map(e => +expDate(e).slice(0,4)), ...shopBought().map(x => +x.date.slice(0,4))].filter(Boolean);
   const minY = Math.min(curY, ...years), maxY = Math.max(curY, ...years);
+  const VL = {all:'ทั้งหมด', trip:'ค่าเที่ยว', shop:'ซื้อของทั่วไป'};
 
   el.append(h('div',{class:'sp-h'},
     h('div',{class:'yearnav'},
       h('button',{type:'button',class:'round','aria-label':'ปีก่อน',disabled:Y<=minY,onclick:()=>{S.year--; S.selMonth=null; render();}},'‹'),
       h('h2',{text:'ปี ' + beYear(Y)}),
-      h('button',{type:'button',class:'round','aria-label':'ปีถัดไป',disabled:Y>=maxY,onclick:()=>{S.year++; S.selMonth=null; render();}},'›'))));
+      h('button',{type:'button',class:'round','aria-label':'ปีถัดไป',disabled:Y>=maxY,onclick:()=>{S.year++; S.selMonth=null; render();}},'›')),
+    h('div',{class:'vtoggle',role:'group','aria-label':'ดูค่าใช้จ่าย'}, Object.entries(VL).map(([k,l]) =>
+      h('button',{type:'button','aria-pressed':String(V===k),onclick:()=>{S.spendView=k; render();}}, l)))));
 
   el.append(h('div',{class:'panel tiles'},
-    h('div',{class:'tile'}, h('span',{class:'v',text:baht(total)}), h('span',{class:'l',text:'ค่าเที่ยวทั้งปี'})),
+    h('div',{class:'tile'}, h('span',{class:'v',text:baht(total)}), h('span',{class:'l',text:(V === 'all' ? 'ใช้ไปทั้งปี' : VL[V] + 'ทั้งปี')})),
     h('div',{class:'tile'}, h('span',{class:'v',text:baht(months[sel].sum)}), h('span',{class:'l',text:'เดือน' + fmt({month:'long'}).format(new Date(Y,sel,1))})),
-    h('div',{class:'tile'}, h('span',{class:'v',text: tripIds.size ? baht(total / tripIds.size) : '–'}), h('span',{class:'l',text:'เฉลี่ยต่อทริป (' + tripIds.size + ' ทริป)'}))));
+    V === 'all' ? h('div',{class:'tile'}, h('span',{class:'v',text:baht(tShop)}), h('span',{class:'l',text:'ซื้อของทั่วไป (ค่าเที่ยว ' + baht(tTrip) + ')'}))
+    : V === 'trip' ? h('div',{class:'tile'}, h('span',{class:'v',text: tripIds.size ? baht(total / tripIds.size) : '–'}), h('span',{class:'l',text:'เฉลี่ยต่อทริป (' + tripIds.size + ' ทริป)'}))
+    : h('div',{class:'tile'}, h('span',{class:'v',text:yearSh.length}), h('span',{class:'l',text:'รายการที่ซื้อทั้งปี'}))));
 
   const chartPanel = h('div',{class:'panel'}, h('h3',{class:'sm',text:'ใช้ไปเท่าไหร่ในแต่ละเดือน'}));
-  if (!total) chartPanel.append(h('p',{class:'empty',style:'padding:20px 0',text:'ปีนี้ยังไม่มีค่าใช้จ่าย เพิ่มได้ในการ์ดทริปแต่ละอัน ที่หัวข้อ “ค่าใช้จ่าย”'}));
-  else chartPanel.append(barChart(months, Y, sel));
+  if (!total) chartPanel.append(h('p',{class:'empty',style:'padding:20px 0',text: V === 'shop' ? 'ปีนี้ยังไม่มีการซื้อของ จดได้ในแท็บ “ซื้อของ”' : 'ปีนี้ยังไม่มีค่าใช้จ่าย เพิ่มได้ในการ์ดทริป หรือในแท็บ “ซื้อของ”'}));
+  else {
+    chartPanel.append(barChart(months, Y, sel));
+    if (V === 'all') chartPanel.append(h('div',{class:'legend'}, h('span',{}, h('i',{class:'sw tr'}),'ค่าเที่ยว (รวมค่ากินและของที่ซื้อตอนเที่ยว)'), h('span',{}, h('i',{class:'sw sh'}),'ซื้อของทั่วไป')));
+  }
   el.append(chartPanel);
 
   if (total) {
     const M = months[sel];
     const mt = Object.entries(M.trips).sort((a,b) => b[1] - a[1]);
     const detail = h('div',{class:'panel'}, h('h3',{class:'sm',text:fMonth.format(new Date(Y,sel,1)) + ' · ' + baht(M.sum)}));
-    if (!mt.length) detail.append(h('p',{style:'color:var(--muted);margin:0',text:'เดือนนี้ไม่มีค่าใช้จ่าย แตะแท่งเดือนอื่นในกราฟเพื่อดูรายละเอียด'}));
-    else detail.append(h('div',{class:'split'},
-      h('div',{class:'mtrips'}, mt.map(([tid,a]) => { const t = S.trips.find(x => x.id === tid);
-        return h('button',{type:'button',onclick:()=>jumpTo(t)}, h('span',{text:t ? t.title : 'ทริปที่ถูกลบ'}), h('b',{text:baht(a)})); })),
-      hbars(M.cats)));
+    if (!M.sum) detail.append(h('p',{style:'color:var(--muted);margin:0',text:'เดือนนี้ไม่มีค่าใช้จ่าย แตะแท่งเดือนอื่นในกราฟเพื่อดูรายละเอียด'}));
+    else {
+      const goShop = () => { S.tab = 'shop'; S.shopMonth = new Date(Y, sel, 1); render(); window.scrollTo({top:0}); };
+      detail.append(h('div',{class:'split'},
+        h('div',{class:'mtrips'},
+          mt.map(([tid,a]) => { const t = S.trips.find(x => x.id === tid);
+            return h('button',{type:'button',onclick:()=>jumpTo(t)}, h('span',{text:'ทริป ' + (t ? t.title : 'ที่ถูกลบ')}), h('b',{text:baht(a)})); }),
+          M.shop ? h('button',{type:'button',onclick:goShop}, h('span',{text:'ซื้อของทั่วไป ' + M.items.length + ' รายการ'}), h('b',{text:baht(M.shop)})) : null),
+        hbars(M.cats)));
+    }
     el.append(detail);
 
     const cats = {}, payers = {};
-    yearEx.forEach(e => { const a = Number(e.amount)||0; cats[e.cat||'อื่นๆ'] = (cats[e.cat||'อื่นๆ']||0) + a; const p = e.paidBy||'split'; payers[p] = (payers[p]||0) + a; });
+    months.forEach(m => Object.entries(m.cats).forEach(([c,a]) => { cats[c] = (cats[c]||0) + a; }));
+    [...yearEx, ...yearSh].forEach(e => { const p = e.paidBy || 'split'; payers[p] = (payers[p]||0) + (Number(e.amount)||0); });
     const pl = {}; Object.entries(payers).forEach(([p,a]) => { const n = shortName(p); pl[n] = (pl[n]||0) + a; });
     el.append(h('div',{class:'split'},
       h('div',{class:'panel'}, h('h3',{class:'sm',text:'ทั้งปี แยกตามหมวด'}), hbars(cats)),
@@ -1049,9 +1215,9 @@ function renderSpend(){
 
     el.append(h('details',{class:'panel'}, h('summary',{text:'ดูเป็นตาราง'}),
       h('div',{class:'tablewrap'}, h('table',{},
-        h('thead',{}, h('tr',{}, h('th',{text:'เดือน'}), h('th',{class:'r',text:'ทริป'}), h('th',{class:'r',text:'ใช้ไป'}))),
-        h('tbody',{}, months.map((m,i) => h('tr',{}, h('td',{text:fMonth.format(new Date(Y,i,1))}), h('td',{class:'r',text:Object.keys(m.trips).length || '–'}), h('td',{class:'r',text:m.sum ? baht(m.sum) : '–'}))),
-          h('tr',{}, h('th',{text:'รวม'}), h('th',{class:'r',text:tripIds.size}), h('th',{class:'r',text:baht(total)})))))));
+        h('thead',{}, h('tr',{}, h('th',{text:'เดือน'}), h('th',{class:'r',text:'ค่าเที่ยว'}), h('th',{class:'r',text:'ซื้อของทั่วไป'}), h('th',{class:'r',text:'รวม'}))),
+        h('tbody',{}, months.map((m,i) => h('tr',{}, h('td',{text:fMonth.format(new Date(Y,i,1))}), h('td',{class:'r',text:m.trip ? baht(m.trip) : '–'}), h('td',{class:'r',text:m.shop ? baht(m.shop) : '–'}), h('td',{class:'r',text:m.sum ? baht(m.sum) : '–'}))),
+          h('tr',{}, h('th',{text:'รวม'}), h('th',{class:'r',text:baht(tTrip)}), h('th',{class:'r',text:baht(tShop)}), h('th',{class:'r',text:baht(total)})))))));
   }
 }
 function hbars(obj){
@@ -1079,15 +1245,20 @@ function barChart(months, Y, sel){
   const fShortM = fmt({month:'short'});
   months.forEach((m,i) => {
     const cx = L + col*i + col/2, x = cx - bw/2, top = y(m.sum), hgt = T + ph - top;
-    const show = e => { tip.textContent = fMonth.format(new Date(Y,i,1)) + ' · ' + baht(m.sum) + ' · ' + Object.keys(m.trips).length + ' ทริป'; tip.style.left = (cx / W * 100) + '%'; tip.hidden = false; };
+    const parts = (m.trip && m.shop) ? ' (เที่ยว ' + baht(m.trip) + ' · ซื้อของ ' + baht(m.shop) + ')' : m.shop ? ' · ซื้อของ ' + (m.items||[]).length + ' รายการ' : ' · ' + Object.keys(m.trips).length + ' ทริป';
+    const show = e => { tip.textContent = fMonth.format(new Date(Y,i,1)) + ' · ' + baht(m.sum) + parts; tip.style.left = (cx / W * 100) + '%'; tip.hidden = false; };
     const g = s('g',{});
     g.append(s('rect',{class:'hit',x:L+col*i,y:T,width:col,height:ph+B,tabindex:'0',role:'button','aria-label':fMonth.format(new Date(Y,i,1)) + ' ' + baht(m.sum),
       onmouseenter:show, onfocus:show, onmouseleave:()=>{tip.hidden=true;}, onblur:()=>{tip.hidden=true;},
       onclick:()=>{S.selMonth={y:Y,m:i}; render();}, onkeydown:e=>{ if (e.key==='Enter'||e.key===' ') { e.preventDefault(); S.selMonth={y:Y,m:i}; render(); } }}));
     if (m.sum > 0) {
-      const r = Math.min(4, bw/2, hgt);
-      g.append(s('path',{class:'bar' + (i===sel ? ' sel' : ''), 'pointer-events':'none',
-        d:`M${x},${T+ph} V${top+r} Q${x},${top} ${x+r},${top} H${x+bw-r} Q${x+bw},${top} ${x+bw},${top+r} V${T+ph} Z`}));
+      const r = Math.min(4, bw/2, hgt), sc = i===sel ? ' sel' : '';
+      const shop = m.shop || 0, trip = m.sum - shop, mid = y(trip);
+      const rounded = bot => `M${x},${bot} V${top+r} Q${x},${top} ${x+r},${top} H${x+bw-r} Q${x+bw},${top} ${x+bw},${top+r} V${bot} Z`;
+      if (trip > 0 && shop > 0) {
+        g.append(s('rect',{class:'bar' + sc,'pointer-events':'none',x,y:mid,width:bw,height:T+ph-mid}));
+        g.append(s('path',{class:'bar shp' + sc,'pointer-events':'none',d:rounded(mid)}));
+      } else g.append(s('path',{class:'bar' + (shop > 0 ? ' shp' : '') + sc,'pointer-events':'none',d:rounded(T+ph)}));
     }
     if (i === sel && m.sum > 0) g.append(s('text',{class:'vlab',x:cx,y:top-6,'text-anchor':'middle','pointer-events':'none',text:bahtShort(m.sum)}));
     g.append(s('text',{class:'mlab' + (i===sel ? ' sel' : ''),x:cx,y:H-8,'text-anchor':'middle','pointer-events':'none',text:fShortM.format(new Date(Y,i,1))}));
@@ -1255,9 +1426,13 @@ function renderCal(){
 function renderMStat(){
   const el = $('#mstat'); el.replaceChildren();
   const t = today(), key = t.getFullYear() + '-' + pad(t.getMonth()+1);
-  const sum = p => S.expenses.filter(e => expDate(e).startsWith(p)).reduce((a,e) => a + (Number(e.amount)||0), 0);
+  const sumT = p => S.expenses.filter(e => expDate(e).startsWith(p)).reduce((a,e) => a + (Number(e.amount)||0), 0);
+  const sumS = p => shopBought().filter(x => x.date.startsWith(p)).reduce((a,x) => a + (Number(x.amount)||0), 0);
+  const sum = p => sumT(p) + sumS(p);
   const prevD = new Date(t.getFullYear(), t.getMonth()-1, 1);
-  el.append(h('span',{class:'l',text:'เดือนนี้ใช้ไปกับการเที่ยว'}), h('span',{class:'v',text:baht(sum(key))}),
+  el.append(h('span',{class:'l',text:'เดือนนี้ใช้ไปทั้งหมด'}), h('span',{class:'v',text:baht(sum(key))}),
+    h('div',{class:'row'}, h('span',{text:'ค่าเที่ยว'}), h('b',{text:baht(sumT(key))})),
+    h('div',{class:'row'}, h('span',{text:'ซื้อของทั่วไป'}), h('b',{text:baht(sumS(key))})),
     h('div',{class:'row'}, h('span',{text:'เดือนที่แล้ว'}), h('b',{text:baht(sum(prevD.getFullYear() + '-' + pad(prevD.getMonth()+1)))})),
     h('div',{class:'row'}, h('span',{text:'ทั้งปี ' + beYear(t.getFullYear())}), h('b',{text:baht(sum(t.getFullYear() + '-'))})),
     S.tab === 'spend' ? null : h('button',{type:'button',class:'link',style:'align-self:flex-start;margin-top:4px',onclick:()=>{S.tab='spend'; S.year=t.getFullYear(); S.selMonth=null; render(); window.scrollTo({top:0});}},'ดูสรุปค่าใช้จ่าย'));
